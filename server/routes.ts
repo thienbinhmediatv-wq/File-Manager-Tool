@@ -3,11 +3,17 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
 import OpenAI from "openai";
+import fs from "fs";
+import path from "path";
+import PDFDocument from "pdfkit";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
+
+const GEN_DIR = path.join(process.cwd(), "public", "generated");
+if (!fs.existsSync(GEN_DIR)) fs.mkdirSync(GEN_DIR, { recursive: true });
 
 const STEP_NAMES: Record<number, string> = {
   1: "Thu thập dữ liệu",
@@ -20,19 +26,58 @@ const STEP_NAMES: Record<number, string> = {
 };
 
 const STEP_PROMPTS: Record<number, string> = {
-  1: "Chào bạn! Tôi là trợ lý AI thiết kế kiến trúc của Bmt Decor. Hãy cho tôi biết thông tin về khu đất và yêu cầu thiết kế của bạn. Bạn có yêu cầu đặc biệt về phong thủy, phòng thờ, gara xe không?",
+  1: "Chào bạn! Tôi là trợ lý AI thiết kế kiến trúc của Bmt Decor. Hãy cho tôi biết thông tin về khu đất và yêu cầu thiết kế của bạn.",
   2: "Tôi đã phân tích hiện trạng khu đất. Bạn muốn điều chỉnh gì về hướng nhà, bố trí phòng, hay yêu cầu phong thủy không?",
   3: "Bản vẽ CAD đã được tạo. Bạn muốn chỉnh sửa vị trí tường, cửa, cầu thang hay kích thước phòng nào không?",
-  4: "Hãy cho tôi biết phong cách mặt tiền bạn yêu thích: Hiện đại, Tân cổ điển, Minimalist, Wabi Sabi... Bạn thích tông màu nào?",
-  5: "Bạn muốn nội thất phong cách nào? Hãy cho tôi biết về vật liệu ưa thích (gỗ, đá, kính...), kiểu đồ nội thất, và ngân sách dự kiến.",
-  6: "Tôi sẽ render các góc nhìn cho bạn. Bạn muốn xem góc nào: mặt tiền, phòng khách, phòng ngủ, bếp, sân vườn, panorama 360°?",
-  7: "Hồ sơ PDF sẽ bao gồm tất cả bản vẽ, render và thông tin kỹ thuật. Bạn muốn thêm nội dung gì vào hồ sơ không?",
+  4: "Hãy cho tôi biết phong cách mặt tiền bạn yêu thích và tông màu mong muốn.",
+  5: "Bạn muốn nội thất phong cách nào? Hãy cho tôi biết về vật liệu ưa thích và ngân sách dự kiến.",
+  6: "Tôi sẽ render các góc nhìn cho bạn. Bạn muốn xem góc nào?",
+  7: "Hồ sơ PDF sẽ bao gồm tất cả bản vẽ, render và thông tin kỹ thuật.",
 };
+
+async function aiChat(messages: Array<{role: string; content: string}>, maxTokens = 2048): Promise<string> {
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4.1-mini",
+    messages: messages as Array<{role: "user" | "assistant" | "system"; content: string}>,
+    max_completion_tokens: maxTokens,
+  });
+  return completion.choices[0]?.message?.content || "";
+}
+
+async function aiGenerateImage(prompt: string, projectId: number, name: string): Promise<string> {
+  const response = await openai.images.generate({
+    model: "gpt-image-1",
+    prompt,
+    n: 1,
+    size: "1024x1024",
+  });
+  const b64 = response.data[0]?.b64_json;
+  if (b64) {
+    const filename = `${projectId}_${name}_${Date.now()}.png`;
+    const filepath = path.join(GEN_DIR, filename);
+    fs.writeFileSync(filepath, Buffer.from(b64, "base64"));
+    return `/generated/${filename}`;
+  }
+  const url = response.data[0]?.url;
+  return url || "";
+}
+
+function buildProjectContext(project: Record<string, unknown>): string {
+  return `Thông tin dự án:
+- Kích thước đất: ${project.landWidth}m x ${project.landLength}m (${(project.landWidth as number) * (project.landLength as number)} m²)
+- Số tầng: ${project.floors}
+- Số phòng ngủ: ${project.bedrooms}
+- Phong cách: ${project.style}
+- Ngân sách: ${project.budget} triệu VND
+- Yêu cầu đặc biệt: ${JSON.stringify(project.siteRequirements || {})}`;
+}
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  app.use("/generated", (await import("express")).default.static(GEN_DIR));
 
   app.get("/api/projects", async (_req, res) => {
     const allProjects = await storage.getProjects();
@@ -120,140 +165,361 @@ export async function registerRoutes(
     const statuses = { ...(project.stepStatuses as Record<string, string> || {}), [step]: "processing" };
     await storage.updateProject(id, { stepStatuses: statuses });
 
+    res.json({ message: "Processing started", stepName: STEP_NAMES[step] });
+
+    processStepInBackground(id, step, project).catch(err => {
+      console.error(`Background step ${step} error:`, err);
+    });
+  });
+
+  async function processStepInBackground(id: number, step: number, _initialProject: any) {
+    const freshProject = await storage.getProject(id);
+    if (!freshProject) return;
+    const project = freshProject;
     let result: unknown = null;
     const area = project.landWidth * project.landLength;
+    const ctx = buildProjectContext(project as unknown as Record<string, unknown>);
 
     try {
       if (step === 1) {
         result = { collected: true, area, dimensions: `${project.landWidth}m x ${project.landLength}m` };
+
       } else if (step === 2) {
-        const prompt = `Bạn là kiến trúc sư AI. Phân tích khu đất ${project.landWidth}m x ${project.landLength}m, ${project.floors} tầng, ${project.bedrooms} phòng ngủ, phong cách ${project.style}. Đề xuất bố trí layout phòng chi tiết bằng JSON gồm: tên phòng, vị trí (x,y), kích thước (w,h). Trả lời bằng tiếng Việt.`;
-        const completion = await openai.chat.completions.create({
-          model: "gpt-4.1-mini",
-          messages: [{ role: "user", content: prompt }],
-          max_completion_tokens: 2048,
-        });
-        const aiText = completion.choices[0]?.message?.content || "";
-        result = {
-          analysis: {
-            dimensions: `${project.landWidth}m x ${project.landLength}m`,
-            area: `${area} m²`,
-            orientation: "Đông Nam",
-            sunlight: "Tốt - ánh sáng tự nhiên buổi sáng",
-            wind: "Thông thoáng - hướng gió chính Đông Nam",
-            fengShui: "Hướng tốt cho gia chủ",
-          },
-          layout: {
+        const analysisText = await aiChat([
+          { role: "system", content: "Bạn là kiến trúc sư AI chuyên phân tích hiện trạng khu đất tại Việt Nam. Trả lời bằng tiếng Việt, chuyên nghiệp." },
+          { role: "user", content: `Phân tích hiện trạng khu đất và đề xuất layout phòng chi tiết cho dự án:
+${ctx}
+
+Hãy phân tích:
+1. Hướng nhà tối ưu (theo phong thủy VN)
+2. Ánh sáng tự nhiên
+3. Thông gió
+4. Phong thủy sơ bộ
+5. Đề xuất bố trí layout phòng cho từng tầng (tên phòng, kích thước m x m)
+
+Trả lời chi tiết.` }
+        ], 3000);
+
+        const layoutText = await aiChat([
+          { role: "system", content: "Bạn là kiến trúc sư AI. Trả về JSON thuần túy, không markdown." },
+          { role: "user", content: `Tạo layout phòng chi tiết cho nhà ${project.landWidth}m x ${project.landLength}m, ${project.floors} tầng, ${project.bedrooms} phòng ngủ, phong cách ${project.style}.
+
+Trả về JSON dạng:
+{"floors": [{"floor": 1, "rooms": [{"name": "Phòng khách", "w": 4, "h": 5}, ...]}, ...]}
+
+CHỈ trả về JSON, không giải thích.` }
+        ]);
+
+        let layoutData;
+        try {
+          const jsonMatch = layoutText.match(/\{[\s\S]*\}/);
+          layoutData = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+        } catch {
+          layoutData = {
             floors: Array.from({ length: project.floors }, (_, i) => ({
               floor: i + 1,
               rooms: i === 0
                 ? [
-                    { name: "Phòng khách", x: 0, y: 0, w: Math.round(project.landWidth * 0.6), h: Math.round(project.landLength * 0.3) },
-                    { name: "Bếp + Ăn", x: 0, y: Math.round(project.landLength * 0.3), w: Math.round(project.landWidth * 0.5), h: Math.round(project.landLength * 0.25) },
-                    { name: "WC", x: Math.round(project.landWidth * 0.7), y: Math.round(project.landLength * 0.3), w: Math.round(project.landWidth * 0.3), h: Math.round(project.landLength * 0.15) },
-                    { name: "Gara", x: Math.round(project.landWidth * 0.6), y: 0, w: Math.round(project.landWidth * 0.4), h: Math.round(project.landLength * 0.3) },
+                    { name: "Phòng khách", w: Math.round(project.landWidth * 0.6 * 10) / 10, h: Math.round(project.landLength * 0.3 * 10) / 10 },
+                    { name: "Bếp + Ăn", w: Math.round(project.landWidth * 0.5 * 10) / 10, h: Math.round(project.landLength * 0.25 * 10) / 10 },
+                    { name: "WC", w: Math.round(project.landWidth * 0.3 * 10) / 10, h: Math.round(project.landLength * 0.15 * 10) / 10 },
+                    { name: "Gara", w: Math.round(project.landWidth * 0.4 * 10) / 10, h: Math.round(project.landLength * 0.3 * 10) / 10 },
                   ]
                 : [
-                    { name: `Phòng ngủ ${i === 1 ? "Master" : i}`, x: 0, y: 0, w: Math.round(project.landWidth * 0.5), h: Math.round(project.landLength * 0.5) },
-                    { name: `Phòng ngủ ${i + 1}`, x: Math.round(project.landWidth * 0.5), y: 0, w: Math.round(project.landWidth * 0.5), h: Math.round(project.landLength * 0.4) },
-                    { name: "WC", x: Math.round(project.landWidth * 0.5), y: Math.round(project.landLength * 0.4), w: Math.round(project.landWidth * 0.5), h: Math.round(project.landLength * 0.2) },
-                    { name: "Ban công", x: 0, y: Math.round(project.landLength * 0.5), w: project.landWidth, h: Math.round(project.landLength * 0.1) },
+                    { name: `PN ${i === 1 ? "Master" : i}`, w: Math.round(project.landWidth * 0.5 * 10) / 10, h: Math.round(project.landLength * 0.45 * 10) / 10 },
+                    { name: `PN ${i + 1}`, w: Math.round(project.landWidth * 0.5 * 10) / 10, h: Math.round(project.landLength * 0.35 * 10) / 10 },
+                    { name: "WC", w: Math.round(project.landWidth * 0.3 * 10) / 10, h: Math.round(project.landLength * 0.2 * 10) / 10 },
                   ],
             })),
+          };
+        }
+
+        result = {
+          analysis: {
+            dimensions: `${project.landWidth}m x ${project.landLength}m`,
+            area: `${area} m²`,
+            aiAnalysis: analysisText,
           },
-          aiSuggestion: aiText,
+          layout: layoutData,
+          aiSuggestion: analysisText,
         };
+
       } else if (step === 3) {
+        const cadText = await aiChat([
+          { role: "system", content: "Bạn là kỹ sư xây dựng AI. Tạo mô tả bản vẽ kỹ thuật chi tiết bằng tiếng Việt." },
+          { role: "user", content: `Tạo mô tả bản vẽ CAD/kỹ thuật chi tiết cho dự án:
+${ctx}
+Layout đã duyệt: ${JSON.stringify(project.layoutResult || {})}
+
+Mô tả chi tiết:
+1. Bản vẽ mặt bằng từng tầng (vị trí tường, cửa đi, cửa sổ, cầu thang)
+2. Mặt cắt A-A (chiều cao tầng, kết cấu sàn, mái)
+3. Mặt đứng chính (mặt tiền)
+4. Kích thước chi tiết từng phòng
+5. Vị trí cột, dầm chính
+
+Trả lời chi tiết kỹ thuật.` }
+        ], 3000);
+
+        const cadImageUrl = await aiGenerateImage(
+          `Architectural floor plan blueprint, 2D technical drawing, top-down view of a ${project.floors}-story Vietnamese house, ${project.landWidth}m x ${project.landLength}m, ${project.style} style, showing rooms, walls, doors, stairs, dimensions, clean professional CAD drawing style, blue lines on white background`,
+          id, "cad_floorplan"
+        );
+
         result = {
           cadDrawings: [
-            { name: "Mặt bằng tầng 1", type: "floorplan", floor: 1 },
-            { name: "Mặt bằng tầng 2", type: "floorplan", floor: 2 },
-            { name: "Mặt cắt A-A", type: "section" },
-            { name: "Mặt đứng chính", type: "elevation" },
+            { name: "Mặt bằng tổng thể", type: "floorplan", imageUrl: cadImageUrl },
           ],
+          cadDescription: cadText,
           dimensions: { totalArea: area * project.floors, wallThickness: 0.2, floorHeight: 3.3 },
-          note: "Bản vẽ CAD mô phỏng. Kết nối AutoCAD/Revit server để xuất file thực.",
         };
+
       } else if (step === 4) {
+        const facadeStyle = project.facadeStyle || project.style;
+
+        const facadeUrl1 = await aiGenerateImage(
+          `Exterior facade of a beautiful ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture style, ${project.landWidth}m wide, daytime, professional architectural visualization, photorealistic, lush landscaping, clean modern design`,
+          id, "facade_day"
+        );
+
+        const facadeUrl2 = await aiGenerateImage(
+          `Exterior facade of a beautiful ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture style, ${project.landWidth}m wide, night time with warm interior lighting, professional architectural visualization, photorealistic`,
+          id, "facade_night"
+        );
+
+        const designText = await aiChat([
+          { role: "system", content: "Bạn là kiến trúc sư AI chuyên thiết kế mặt tiền nhà Việt Nam." },
+          { role: "user", content: `Mô tả chi tiết thiết kế mặt tiền phong cách ${facadeStyle} cho nhà ${project.floors} tầng, ${project.landWidth}m rộng:
+- Vật liệu mặt tiền
+- Tỷ lệ cửa sổ
+- Mái và chi tiết kiến trúc
+- Màu sắc chủ đạo
+- Cây xanh trang trí` }
+        ]);
+
         result = {
-          facadeStyle: project.facadeStyle || project.style,
-          model3d: {
-            format: "glTF",
-            polyCount: 125000,
-            textures: ["concrete", "glass", "wood"],
-          },
-          facadeImages: [
-            "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&h=600&fit=crop",
-            "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&h=600&fit=crop",
-          ],
-          note: "Mô hình 3D mô phỏng. Kết nối Blender/SketchUp server để render thực.",
+          facadeStyle,
+          facadeImages: [facadeUrl1, facadeUrl2],
+          designDescription: designText,
         };
+
       } else if (step === 5) {
+        const interiorText = await aiChat([
+          { role: "system", content: "Bạn là nhà thiết kế nội thất AI chuyên nghiệp tại Việt Nam. Trả lời bằng tiếng Việt." },
+          { role: "user", content: `Thiết kế nội thất chi tiết cho dự án:
+${ctx}
+
+Cho mỗi phòng (phòng khách, phòng ngủ master, bếp, WC), hãy đề xuất:
+1. Vật liệu sàn, tường, trần
+2. Đồ nội thất cụ thể (tên, kích thước, giá ước tính VND)
+3. Hệ thống ánh sáng
+4. Tổng chi phí nội thất ước tính
+
+Trả lời chi tiết, có số liệu cụ thể.` }
+        ], 3000);
+
+        const interiorUrl = await aiGenerateImage(
+          `Interior design of a luxurious Vietnamese ${project.style} style living room, modern furniture, natural wood materials, warm lighting, indoor plants, professional interior photography, photorealistic, 4K quality`,
+          id, "interior_living"
+        );
+
+        const bedroomUrl = await aiGenerateImage(
+          `Interior design of a beautiful ${project.style} style master bedroom, Vietnamese residential, elegant bed, warm ambient lighting, natural materials, cozy atmosphere, professional interior photography`,
+          id, "interior_bedroom"
+        );
+
         result = {
-          materials: [
-            { name: "Gỗ sồi tự nhiên", area: "Sàn phòng khách, phòng ngủ", cost: "850.000 VND/m²" },
-            { name: "Gạch porcelain 60x60", area: "Bếp, WC", cost: "450.000 VND/m²" },
-            { name: "Sơn Dulux nội thất", area: "Tường toàn bộ", cost: "120.000 VND/m²" },
-            { name: "Kính cường lực 10mm", area: "Cửa sổ, vách ngăn", cost: "750.000 VND/m²" },
-          ],
-          furniture: [
-            { room: "Phòng khách", items: ["Sofa chữ L", "Bàn trà", "Kệ TV", "Đèn trang trí"] },
-            { room: "Phòng ngủ Master", items: ["Giường King", "Tủ quần áo", "Bàn trang điểm", "Đèn ngủ"] },
-            { room: "Bếp", items: ["Tủ bếp chữ L", "Đảo bếp", "Máy hút mùi", "Bộ bàn ăn 6 ghế"] },
+          interiorDescription: interiorText,
+          interiorImages: [
+            { name: "Phòng khách", url: interiorUrl },
+            { name: "Phòng ngủ Master", url: bedroomUrl },
           ],
           estimatedCost: `${Math.round(area * project.floors * 8.5)} triệu VND`,
-          note: "Nội thất mô phỏng. Kết nối 3D furniture library để render chi tiết.",
         };
+
       } else if (step === 6) {
-        result = {
-          renders: [
-            { name: "Mặt tiền ban ngày", url: "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1200&h=800&fit=crop", angle: "facade" },
-            { name: "Phòng khách", url: "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?w=1200&h=800&fit=crop", angle: "living" },
-            { name: "Phòng ngủ Master", url: "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=1200&h=800&fit=crop", angle: "bedroom" },
-            { name: "Bếp & Phòng ăn", url: "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=1200&h=800&fit=crop", angle: "kitchen" },
-            { name: "Sân vườn", url: "https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=1200&h=800&fit=crop", angle: "garden" },
-          ],
-          note: "Render mô phỏng từ Unsplash. Kết nối render engine để tạo hình thực.",
-        };
+        const renderPrompts = [
+          { name: "Mặt tiền ban ngày", prompt: `Photorealistic exterior render of a ${project.floors}-story ${project.style} Vietnamese house, ${project.landWidth}m x ${project.landLength}m lot, daytime, beautiful landscaping, blue sky, professional architectural visualization, 8K quality` },
+          { name: "Phòng khách", prompt: `Photorealistic interior render of a spacious ${project.style} style living room in Vietnamese house, natural light through large windows, modern furniture, warm atmosphere, professional interior visualization` },
+          { name: "Phòng ngủ Master", prompt: `Photorealistic interior render of a ${project.style} style master bedroom, Vietnamese residential, elegant design, warm lighting, comfortable atmosphere, high quality visualization` },
+        ];
+
+        const renders = [];
+        for (const r of renderPrompts) {
+          const url = await aiGenerateImage(r.prompt, id, `render_${r.name.replace(/\s/g, "_")}`);
+          renders.push({ name: r.name, url, angle: r.name });
+        }
+
+        result = { renders };
+
       } else if (step === 7) {
+        const pdfFilename = `${id}_hoso_${Date.now()}.pdf`;
+        const pdfPath = path.join(GEN_DIR, pdfFilename);
+
+        const doc = new PDFDocument({ size: "A4", margin: 50 });
+        let pageCount = 1;
+        doc.on("pageAdded", () => { pageCount++; });
+        const writeStream = fs.createWriteStream(pdfPath);
+        doc.pipe(writeStream);
+
+        doc.fontSize(24).text("BMT DECOR", { align: "center" });
+        doc.moveDown(0.5);
+        doc.fontSize(18).text("HO SO THIET KE KIEN TRUC", { align: "center" });
+        doc.moveDown(2);
+
+        doc.fontSize(14).text(`Du an: ${project.title}`);
+        doc.text(`Khach hang: ${project.clientName || "N/A"}`);
+        doc.text(`Kich thuoc dat: ${project.landWidth}m x ${project.landLength}m (${area} m2)`);
+        doc.text(`So tang: ${project.floors}`);
+        doc.text(`Phong ngu: ${project.bedrooms}`);
+        doc.text(`Phong cach: ${project.style}`);
+        doc.text(`Ngan sach: ${project.budget} trieu VND`);
+        doc.moveDown(2);
+
+        doc.fontSize(16).text("1. PHAN TICH HIEN TRANG", { underline: true });
+        doc.moveDown(0.5);
+        const analysis = project.analysisResult as Record<string, string> | null;
+        if (analysis?.aiAnalysis) {
+          doc.fontSize(10).text(String(analysis.aiAnalysis).substring(0, 2000));
+        } else if (analysis) {
+          doc.fontSize(10).text(JSON.stringify(analysis, null, 2).substring(0, 1000));
+        }
+        doc.moveDown(1);
+
+        doc.addPage();
+        doc.fontSize(16).text("2. BO TRI LAYOUT", { underline: true });
+        doc.moveDown(0.5);
+        const layout = project.layoutResult;
+        if (layout) {
+          doc.fontSize(10).text(JSON.stringify(layout, null, 2).substring(0, 2000));
+        }
+        doc.moveDown(1);
+
+        doc.addPage();
+        doc.fontSize(16).text("3. BAN VE CAD", { underline: true });
+        doc.moveDown(0.5);
+        const cad = project.cadResult as { cadDescription?: string; cadDrawings?: Array<{imageUrl?: string}> } | null;
+        if (cad?.cadDescription) {
+          doc.fontSize(10).text(cad.cadDescription.substring(0, 2000));
+        }
+        if (cad?.cadDrawings) {
+          for (const drawing of cad.cadDrawings) {
+            if (drawing.imageUrl && drawing.imageUrl.startsWith("/generated/")) {
+              const imgPath = path.join(GEN_DIR, drawing.imageUrl.replace("/generated/", ""));
+              if (fs.existsSync(imgPath)) {
+                try { doc.addPage().image(imgPath, { fit: [500, 400], align: "center" }); } catch {}
+              }
+            }
+          }
+        }
+
+        doc.addPage();
+        doc.fontSize(16).text("4. MO HINH 3D & MAT TIEN", { underline: true });
+        doc.moveDown(0.5);
+        const model3d = project.model3dResult as { facadeImages?: string[]; designDescription?: string } | null;
+        if (model3d?.designDescription) {
+          doc.fontSize(10).text(model3d.designDescription.substring(0, 2000));
+        }
+        if (model3d?.facadeImages) {
+          for (const imgUrl of model3d.facadeImages) {
+            if (imgUrl.startsWith("/generated/")) {
+              const imgPath = path.join(GEN_DIR, imgUrl.replace("/generated/", ""));
+              if (fs.existsSync(imgPath)) {
+                try { doc.addPage().image(imgPath, { fit: [500, 400], align: "center" }); } catch {}
+              }
+            }
+          }
+        }
+
+        doc.addPage();
+        doc.fontSize(16).text("5. THIET KE NOI THAT", { underline: true });
+        doc.moveDown(0.5);
+        const interior = project.interiorResult as { interiorDescription?: string; interiorImages?: Array<{url: string}> } | null;
+        if (interior?.interiorDescription) {
+          doc.fontSize(10).text(interior.interiorDescription.substring(0, 2000));
+        }
+        if (interior?.interiorImages) {
+          for (const img of interior.interiorImages) {
+            if (img.url.startsWith("/generated/")) {
+              const imgPath = path.join(GEN_DIR, img.url.replace("/generated/", ""));
+              if (fs.existsSync(imgPath)) {
+                try { doc.addPage().image(imgPath, { fit: [500, 400], align: "center" }); } catch {}
+              }
+            }
+          }
+        }
+
+        doc.addPage();
+        doc.fontSize(16).text("6. RENDER PHOI CANH", { underline: true });
+        const renderResult = project.renderResult as { renders?: Array<{name: string; url: string}> } | null;
+        if (renderResult?.renders) {
+          for (const r of renderResult.renders) {
+            if (r.url.startsWith("/generated/")) {
+              const imgPath = path.join(GEN_DIR, r.url.replace("/generated/", ""));
+              if (fs.existsSync(imgPath)) {
+                try {
+                  doc.addPage();
+                  doc.fontSize(12).text(r.name);
+                  doc.moveDown(0.5);
+                  doc.image(imgPath, { fit: [500, 400], align: "center" });
+                } catch {}
+              }
+            }
+          }
+        }
+
+        doc.addPage();
+        doc.fontSize(16).text("7. DU TOAN CHI PHI", { underline: true });
+        doc.moveDown(0.5);
+        doc.fontSize(12).text(`Tong dien tich xay dung: ${area * project.floors} m2`);
+        doc.text(`Don gia xay dung uoc tinh: 6-10 trieu VND/m2`);
+        doc.text(`Chi phi xay dung tho: ${Math.round(area * project.floors * 7)} trieu VND`);
+        doc.text(`Chi phi noi that: ${Math.round(area * project.floors * 3.5)} trieu VND`);
+        doc.text(`Tong du toan: ${Math.round(area * project.floors * 10.5)} trieu VND`);
+        doc.moveDown(2);
+        doc.fontSize(10).text("Luu y: Day la uoc tinh so bo. Chi phi thuc te co the thay doi tuy theo vat lieu va nha thau.", { italic: true });
+
+        doc.end();
+
+        await new Promise<void>((resolve) => writeStream.on("finish", resolve));
+
         result = {
-          pageCount: 35 + project.floors * 5,
+          pageCount,
+          downloadUrl: `/generated/${pdfFilename}`,
           sections: [
-            "Trang bìa & Mục lục",
-            "Thông tin dự án",
+            "Trang bìa & Thông tin dự án",
             "Phân tích hiện trạng",
-            "Bản vẽ mặt bằng các tầng",
-            "Bản vẽ mặt cắt & mặt đứng",
-            "Mô hình 3D & mặt tiền",
+            "Bố trí Layout",
+            "Bản vẽ CAD",
+            "Mô hình 3D & Mặt tiền",
             "Thiết kế nội thất",
             "Render phối cảnh",
-            "Bảng khối lượng & Dự toán",
+            "Dự toán chi phí",
           ],
-          estimatedSize: "25 MB",
-          downloadUrl: "#",
-          note: "PDF mô phỏng. Kết nối PDF generator để tạo file thực.",
+          estimatedSize: `${Math.round(fs.statSync(pdfPath).size / 1024)} KB`,
         };
       }
 
       const finalStatuses = { ...(project.stepStatuses as Record<string, string> || {}), [step]: "completed" };
       const updateData: Record<string, unknown> = { stepStatuses: finalStatuses };
-      if (step === 2) updateData.analysisResult = (result as { analysis: unknown }).analysis;
-      if (step === 2) updateData.layoutResult = (result as { layout: unknown }).layout;
+      if (step === 2) {
+        updateData.analysisResult = (result as { analysis: unknown }).analysis;
+        updateData.layoutResult = (result as { layout: unknown }).layout;
+      }
       if (step === 3) updateData.cadResult = result;
       if (step === 4) updateData.model3dResult = result;
       if (step === 5) updateData.interiorResult = result;
       if (step === 6) updateData.renderResult = result;
       if (step === 7) updateData.pdfEstimate = result;
 
-      const updated = await storage.updateProject(id, updateData);
-      res.json({ project: updated, result, stepName: STEP_NAMES[step] });
+      await storage.updateProject(id, updateData);
+      console.log(`Step ${step} completed for project ${id}`);
     } catch (err) {
       console.error("Process step error:", err);
       const errStatuses = { ...(project.stepStatuses as Record<string, string> || {}), [step]: "error" };
       await storage.updateProject(id, { stepStatuses: errStatuses });
-      res.status(500).json({ message: "Processing failed" });
     }
-  });
+  }
 
   app.post("/api/projects/:id/step/:step/approve", async (req, res) => {
     const id = parseInt(req.params.id);
@@ -304,14 +570,7 @@ export async function registerRoutes(
 - Vật liệu xây dựng và nội thất
 - Dự toán chi phí xây dựng
 
-${project ? `Thông tin dự án hiện tại:
-- Tên: ${project.title}
-- Khách hàng: ${project.clientName}
-- Kích thước đất: ${project.landWidth}m x ${project.landLength}m (${project.landWidth * project.landLength}m²)
-- Số tầng: ${project.floors}
-- Phòng ngủ: ${project.bedrooms}
-- Phong cách: ${project.style}
-- Ngân sách: ${project.budget} triệu VND
+${project ? `${buildProjectContext(project as unknown as Record<string, unknown>)}
 - Bước hiện tại: ${step || project.currentStep}/7 - ${STEP_NAMES[step || project.currentStep]}` : ""}
 
 Trả lời ngắn gọn, chuyên nghiệp, bằng tiếng Việt. Đưa ra gợi ý cụ thể và thực tế.`;
@@ -322,20 +581,14 @@ Trả lời ngắn gọn, chuyên nghiệp, bằng tiếng Việt. Đưa ra gợ
         content: m.content,
       }));
 
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4.1-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...recentHistory,
-          { role: "user", content: message },
-        ],
-        max_completion_tokens: 2048,
-      });
-
-      const reply = completion.choices[0]?.message?.content || "Xin lỗi, tôi không thể trả lời lúc này.";
+      const reply = await aiChat([
+        { role: "system", content: systemPrompt },
+        ...recentHistory,
+        { role: "user", content: message },
+      ]);
 
       if (project) {
-        const newHistory = [...chatHistory, 
+        const newHistory = [...chatHistory,
           { role: "user", content: message, timestamp: new Date().toISOString() },
           { role: "assistant", content: reply, timestamp: new Date().toISOString() },
         ];

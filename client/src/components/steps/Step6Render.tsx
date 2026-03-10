@@ -29,13 +29,12 @@ export function Step6Render({ project, stepStatus, onProcess, onApprove, onRedo,
   const [selectedAngles, setSelectedAngles] = useState<Record<string, boolean>>({ facade: true, living: true, bedroom: true });
   const result = project.renderResult as {
     renders?: Array<{ name: string; url: string; angle: string }>;
-    note?: string;
   } | null;
 
   return (
     <StepWrapper
       title="Bước 6: Render phối cảnh"
-      description="Chọn các góc nhìn để AI render hình ảnh phối cảnh."
+      description="AI tạo hình ảnh render phối cảnh chất lượng cao."
       stepStatus={stepStatus}
       onProcess={onProcess}
       onApprove={onApprove}
@@ -46,19 +45,18 @@ export function Step6Render({ project, stepStatus, onProcess, onApprove, onRedo,
         result && result.renders ? (
           <div className="space-y-4">
             <h3 className="font-semibold flex items-center gap-2">
-              <Image className="w-4 h-4 text-primary" /> Hình render phối cảnh
+              <Image className="w-4 h-4 text-primary" /> Render phối cảnh (AI Generated)
             </h3>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-4">
               {result.renders.map((r, i) => (
-                <div key={i} className="rounded-xl overflow-hidden border border-border/50 group" data-testid={`render-image-${i}`}>
-                  <img src={r.url} alt={r.name} className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-500" />
-                  <div className="p-2.5 bg-white">
-                    <p className="text-sm font-semibold">{r.name}</p>
+                <div key={i} className="rounded-xl overflow-hidden border border-border/50" data-testid={`render-image-${i}`}>
+                  <img src={r.url} alt={r.name} className="w-full object-contain" />
+                  <div className="p-3 bg-slate-50">
+                    <p className="font-semibold text-sm">{r.name}</p>
                   </div>
                 </div>
               ))}
             </div>
-            {result.note && <p className="text-xs text-muted-foreground italic">{result.note}</p>}
           </div>
         ) : null
       }
@@ -66,7 +64,7 @@ export function Step6Render({ project, stepStatus, onProcess, onApprove, onRedo,
       <div className="space-y-4">
         <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
           <p className="text-sm text-purple-700">
-            Chọn các góc nhìn bạn muốn render. AI sẽ tạo hình ảnh phối cảnh chất lượng cao cho mỗi góc được chọn.
+            AI sẽ tạo hình ảnh render phối cảnh cho mỗi góc nhìn. Mỗi hình mất khoảng 15-30 giây.
           </p>
         </div>
         <div>

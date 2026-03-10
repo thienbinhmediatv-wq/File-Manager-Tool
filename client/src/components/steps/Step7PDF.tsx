@@ -19,7 +19,6 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, is
     sections?: string[];
     estimatedSize?: string;
     downloadUrl?: string;
-    note?: string;
   } | null;
 
   return (
@@ -36,7 +35,7 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, is
         result ? (
           <div className="space-y-4">
             <h3 className="font-semibold flex items-center gap-2">
-              <FileText className="w-4 h-4 text-primary" /> Hồ sơ PDF
+              <FileText className="w-4 h-4 text-primary" /> Hồ sơ PDF đã tạo
             </h3>
 
             <div className="grid grid-cols-2 gap-3">
@@ -64,11 +63,13 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, is
               </div>
             )}
 
-            <Button className="w-full rounded-xl h-12 bg-gradient-to-r from-primary to-accent text-white shadow-lg" data-testid="button-download-pdf">
-              <Download className="w-4 h-4 mr-2" /> Tải xuống PDF
-            </Button>
-
-            {result.note && <p className="text-xs text-muted-foreground italic">{result.note}</p>}
+            {result.downloadUrl && result.downloadUrl !== "#" && (
+              <a href={result.downloadUrl} target="_blank" rel="noopener noreferrer" className="block">
+                <Button className="w-full rounded-xl h-12 bg-gradient-to-r from-primary to-accent text-white shadow-lg" data-testid="button-download-pdf">
+                  <Download className="w-4 h-4 mr-2" /> Tải xuống PDF
+                </Button>
+              </a>
+            )}
           </div>
         ) : null
       }
@@ -76,21 +77,8 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, is
       <div className="space-y-4">
         <div className="bg-green-50 border border-green-200 rounded-xl p-4">
           <p className="text-sm text-green-700">
-            Hồ sơ PDF sẽ bao gồm tất cả bản vẽ, render phối cảnh, bảng vật liệu và dự toán chi phí. Ước tính khoảng {35 + project.floors * 5} trang.
+            Hồ sơ PDF sẽ tổng hợp tất cả: phân tích, layout, bản vẽ CAD, mặt tiền, nội thất, render phối cảnh và dự toán chi phí.
           </p>
-        </div>
-        <div className="bg-slate-50 rounded-xl p-4">
-          <p className="text-sm font-medium mb-2">Nội dung sẽ bao gồm:</p>
-          <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-            <li>Trang bìa & Mục lục</li>
-            <li>Thông tin dự án & khách hàng</li>
-            <li>Phân tích hiện trạng</li>
-            <li>Bản vẽ mặt bằng các tầng</li>
-            <li>Mô hình 3D & mặt tiền</li>
-            <li>Thiết kế nội thất</li>
-            <li>Render phối cảnh</li>
-            <li>Bảng khối lượng & Dự toán</li>
-          </ul>
         </div>
       </div>
     </StepWrapper>

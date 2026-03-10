@@ -81,7 +81,7 @@ export function useProcessStep() {
     },
     onSuccess: (_d, vars) => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", vars.projectId] });
-      toast({ title: "Hoàn thành", description: "AI đã xử lý xong bước này." });
+      toast({ title: "Đang xử lý", description: "AI đang làm việc, vui lòng đợi..." });
     },
     onError: (error: Error) => {
       toast({ title: "Lỗi xử lý", description: error.message, variant: "destructive" });

@@ -51,8 +51,18 @@ Bmt Decor is an AI-powered Vietnamese architecture & interior design automation 
 - `AI_INTEGRATIONS_OPENAI_API_KEY` - OpenAI API key (via Replit)
 - `SESSION_SECRET` - Session secret
 
+## AI Processing (Real)
+- **Step 1**: Data collection (no AI needed)
+- **Step 2**: GPT-4.1-mini analyzes site + generates layout JSON
+- **Step 3**: GPT-4.1-mini describes CAD specs + gpt-image-1 generates floor plan image
+- **Step 4**: gpt-image-1 generates facade images (day/night) + GPT-4.1-mini describes design
+- **Step 5**: GPT-4.1-mini describes interior design + gpt-image-1 generates living room & bedroom images
+- **Step 6**: gpt-image-1 generates photorealistic renders (facade, living, bedroom)
+- **Step 7**: PDFKit generates real PDF with all text + embedded AI images
+- Processing is **async**: endpoint returns immediately, background function does AI work, frontend polls every 3s
+- Generated images saved to `public/generated/` directory, served as static files
+
 ## Notes
-- CAD, 3D, render outputs are mocked (placeholder images + JSON data)
 - User wants to integrate multiple AIs (Claude, etc.) in future
 - Auto-prompts for image generation stages will be provided by user
 - Tool should learn and improve over time through usage

@@ -33,16 +33,15 @@ export function Step5Interior({ project, stepStatus, onProcess, onApprove, onRed
   const [interiorStyle, setInteriorStyle] = useState(project.style);
   const [lighting, setLighting] = useState("Ấm áp (Warm)");
   const result = project.interiorResult as {
-    materials?: Array<{ name: string; area: string; cost: string }>;
-    furniture?: Array<{ room: string; items: string[] }>;
+    interiorDescription?: string;
+    interiorImages?: Array<{ name: string; url: string }>;
     estimatedCost?: string;
-    note?: string;
   } | null;
 
   return (
     <StepWrapper
       title="Bước 5: Thiết kế nội thất"
-      description="Chọn vật liệu, đồ nội thất, ánh sáng cho từng phòng."
+      description="AI thiết kế nội thất chi tiết với vật liệu, đồ nội thất, ánh sáng."
       stepStatus={stepStatus}
       onProcess={onProcess}
       onApprove={onApprove}
@@ -53,48 +52,33 @@ export function Step5Interior({ project, stepStatus, onProcess, onApprove, onRed
         result ? (
           <div className="space-y-4">
             <h3 className="font-semibold flex items-center gap-2">
-              <Palette className="w-4 h-4 text-primary" /> Thiết kế nội thất
+              <Palette className="w-4 h-4 text-primary" /> Nội thất (AI Generated)
             </h3>
 
-            {result.materials && (
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-2">Bảng vật liệu</p>
-                <div className="space-y-2">
-                  {result.materials.map((m, i) => (
-                    <div key={i} className="flex justify-between items-center bg-slate-50 rounded-lg p-3 text-sm">
-                      <div>
-                        <p className="font-semibold">{m.name}</p>
-                        <p className="text-xs text-muted-foreground">{m.area}</p>
-                      </div>
-                      <span className="text-primary font-medium">{m.cost}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {result.furniture && (
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-2">Danh sách nội thất</p>
-                {result.furniture.map((f, i) => (
-                  <div key={i} className="bg-slate-50 rounded-lg p-3 mb-2">
-                    <p className="font-semibold text-sm mb-1">{f.room}</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {f.items.map((item, j) => (
-                        <span key={j} className="bg-white border border-border/50 text-xs px-2 py-1 rounded-lg">{item}</span>
-                      ))}
+            {result.interiorImages && (
+              <div className="grid grid-cols-2 gap-3">
+                {result.interiorImages.map((img, i) => (
+                  <div key={i} className="rounded-xl overflow-hidden border border-border/50">
+                    <img src={img.url} alt={img.name} className="w-full object-contain" />
+                    <div className="p-2 bg-slate-50 text-center">
+                      <p className="text-sm font-semibold">{img.name}</p>
                     </div>
                   </div>
                 ))}
               </div>
             )}
 
-            {result.estimatedCost && (
-              <div className="bg-green-50 border border-green-200 rounded-xl p-3">
-                <p className="text-sm"><strong>Chi phí ước tính:</strong> <span className="text-green-700 font-semibold">{result.estimatedCost}</span></p>
+            {result.interiorDescription && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm whitespace-pre-wrap max-h-80 overflow-y-auto">
+                {result.interiorDescription}
               </div>
             )}
-            {result.note && <p className="text-xs text-muted-foreground italic">{result.note}</p>}
+
+            {result.estimatedCost && (
+              <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+                <p className="text-sm"><strong>Chi phí nội thất ước tính:</strong> <span className="text-green-700 font-semibold">{result.estimatedCost}</span></p>
+              </div>
+            )}
           </div>
         ) : null
       }

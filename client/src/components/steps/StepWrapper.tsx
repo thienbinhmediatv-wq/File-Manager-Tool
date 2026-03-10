@@ -56,7 +56,13 @@ export function StepWrapper({
             <Sparkles className="w-6 h-6 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
           </div>
           <p className="mt-4 font-medium text-primary animate-pulse">AI đang xử lý...</p>
-          <p className="text-xs text-muted-foreground mt-1">Vui lòng đợi trong giây lát</p>
+          <p className="text-xs text-muted-foreground mt-1">Tạo hình ảnh có thể mất 30-60 giây. Vui lòng chờ.</p>
+        </div>
+      )}
+
+      {stepStatus === "error" && (
+        <div className="rounded-2xl border-2 border-red-200 p-4 bg-red-50">
+          <p className="text-sm text-red-700 font-medium">Có lỗi xảy ra. Bấm "AI Xử lý" để thử lại.</p>
         </div>
       )}
 

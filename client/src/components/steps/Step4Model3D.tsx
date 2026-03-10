@@ -28,7 +28,7 @@ interface Props {
 export function Step4Model3D({ project, stepStatus, onProcess, onApprove, onRedo, onSubmit, isProcessing, isApproving }: Props) {
   const [facadeStyle, setFacadeStyle] = useState(project.facadeStyle || project.style);
   const [colorScheme, setColorScheme] = useState("white-gray");
-  const result = project.model3dResult as { facadeImages?: string[]; note?: string } | null;
+  const result = project.model3dResult as { facadeImages?: string[]; designDescription?: string; facadeStyle?: string } | null;
 
   const handleProcess = () => {
     onSubmit({ facadeStyle });
@@ -38,7 +38,7 @@ export function Step4Model3D({ project, stepStatus, onProcess, onApprove, onRedo
   return (
     <StepWrapper
       title="Bước 4: Mô hình 3D & Mặt tiền"
-      description="Chọn phong cách mặt tiền và AI sẽ dựng mô hình 3D."
+      description="AI tạo hình ảnh mặt tiền dựa trên phong cách bạn chọn."
       stepStatus={stepStatus}
       onProcess={handleProcess}
       onApprove={onApprove}
@@ -49,21 +49,22 @@ export function Step4Model3D({ project, stepStatus, onProcess, onApprove, onRedo
         result ? (
           <div className="space-y-4">
             <h3 className="font-semibold flex items-center gap-2">
-              <Box className="w-4 h-4 text-primary" /> Mô hình 3D & Mặt tiền
+              <Box className="w-4 h-4 text-primary" /> Mặt tiền (AI Generated)
             </h3>
             {result.facadeImages && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 {result.facadeImages.map((url, i) => (
                   <div key={i} className="rounded-xl overflow-hidden border border-border/50" data-testid={`facade-image-${i}`}>
-                    <img src={url} alt={`Mặt tiền ${i + 1}`} className="w-full h-48 object-cover hover:scale-105 transition-transform duration-500" />
+                    <img src={url} alt={`Mặt tiền ${i + 1}`} className="w-full object-contain" />
                   </div>
                 ))}
               </div>
             )}
-            <div className="bg-slate-50 rounded-xl p-3 text-sm">
-              <p><strong>Phong cách:</strong> {facadeStyle}</p>
-            </div>
-            {result.note && <p className="text-xs text-muted-foreground italic">{result.note}</p>}
+            {result.designDescription && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm whitespace-pre-wrap max-h-64 overflow-y-auto">
+                {result.designDescription}
+              </div>
+            )}
           </div>
         ) : null
       }

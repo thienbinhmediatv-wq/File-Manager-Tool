@@ -1,6 +1,6 @@
 import { StepWrapper } from "./StepWrapper";
 import type { Project } from "@shared/schema";
-import { Compass, Sun, Wind, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 
 interface Props {
   project: Project;
@@ -14,7 +14,7 @@ interface Props {
 
 export function Step2Analysis({ project, stepStatus, onProcess, onApprove, onRedo, isProcessing, isApproving }: Props) {
   const analysis = project.analysisResult as Record<string, string> | null;
-  const layout = project.layoutResult as { floors: Array<{ floor: number; rooms: Array<{ name: string; x: number; y: number; w: number; h: number }> }> } | null;
+  const layout = project.layoutResult as { floors?: Array<{ floor: number; rooms: Array<{ name: string; w: number; h: number }> }> } | null;
 
   return (
     <StepWrapper
@@ -31,53 +31,38 @@ export function Step2Analysis({ project, stepStatus, onProcess, onApprove, onRed
           {analysis && (
             <div>
               <h3 className="font-semibold mb-3 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-primary" /> Kết quả phân tích
+                <Sparkles className="w-4 h-4 text-primary" /> Kết quả phân tích AI
               </h3>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-slate-50 rounded-xl p-3 flex items-start gap-2">
-                  <Compass className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-                  <div>
-                    <span className="text-xs text-muted-foreground">Hướng nhà</span>
-                    <p className="text-sm font-semibold">{analysis.orientation}</p>
-                  </div>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="bg-slate-50 rounded-xl p-3">
+                  <span className="text-xs text-muted-foreground">Kích thước</span>
+                  <p className="text-sm font-semibold">{analysis.dimensions}</p>
                 </div>
-                <div className="bg-slate-50 rounded-xl p-3 flex items-start gap-2">
-                  <Sun className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
-                  <div>
-                    <span className="text-xs text-muted-foreground">Ánh sáng</span>
-                    <p className="text-sm font-semibold">{analysis.sunlight}</p>
-                  </div>
-                </div>
-                <div className="bg-slate-50 rounded-xl p-3 flex items-start gap-2">
-                  <Wind className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
-                  <div>
-                    <span className="text-xs text-muted-foreground">Thông gió</span>
-                    <p className="text-sm font-semibold">{analysis.wind}</p>
-                  </div>
-                </div>
-                <div className="bg-slate-50 rounded-xl p-3 flex items-start gap-2">
-                  <span className="text-lg shrink-0">☯️</span>
-                  <div>
-                    <span className="text-xs text-muted-foreground">Phong thủy</span>
-                    <p className="text-sm font-semibold">{analysis.fengShui}</p>
-                  </div>
+                <div className="bg-slate-50 rounded-xl p-3">
+                  <span className="text-xs text-muted-foreground">Diện tích</span>
+                  <p className="text-sm font-semibold">{analysis.area}</p>
                 </div>
               </div>
+              {analysis.aiAnalysis && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm whitespace-pre-wrap max-h-80 overflow-y-auto" data-testid="text-ai-analysis">
+                  {analysis.aiAnalysis}
+                </div>
+              )}
             </div>
           )}
 
           {layout && layout.floors && (
             <div>
-              <h3 className="font-semibold mb-3">Layout phòng</h3>
+              <h3 className="font-semibold mb-3">Layout phòng (AI đề xuất)</h3>
               {layout.floors.map(floor => (
                 <div key={floor.floor} className="mb-4">
                   <p className="text-sm font-medium text-muted-foreground mb-2">Tầng {floor.floor}</p>
-                  <div className="relative bg-slate-100 rounded-xl p-4" style={{ minHeight: 200 }}>
+                  <div className="bg-slate-100 rounded-xl p-4">
                     <div className="grid grid-cols-3 gap-2">
                       {floor.rooms.map((room, i) => (
                         <div
                           key={i}
-                          className="bg-white border-2 border-primary/20 rounded-lg p-2 text-center hover:border-primary/50 transition-colors"
+                          className="bg-white border-2 border-primary/20 rounded-lg p-3 text-center hover:border-primary/50 transition-colors"
                           data-testid={`layout-room-${floor.floor}-${i}`}
                         >
                           <p className="text-xs font-semibold text-primary">{room.name}</p>
