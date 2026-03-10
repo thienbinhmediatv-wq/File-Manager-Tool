@@ -6,6 +6,7 @@ import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
 import PDFDocument from "pdfkit";
+import multer from "multer";
 
 const SERPAPI_KEY = process.env.SERPAPI_KEY || "";
 const ARTIFICIAL_STUDIO_KEY = process.env.ARTIFICIAL_STUDIO_API_KEY || "";
@@ -123,6 +124,28 @@ const openai = new OpenAI({
 const GEN_DIR = path.join(process.cwd(), "public", "generated");
 if (!fs.existsSync(GEN_DIR)) fs.mkdirSync(GEN_DIR, { recursive: true });
 
+const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const uploadStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const name = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
+    cb(null, name);
+  },
+});
+
+const upload = multer({
+  storage: uploadStorage,
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".dwg", ".dxf", ".mp4", ".mov", ".avi"];
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, allowed.includes(ext));
+  },
+});
+
 const STEP_NAMES: Record<number, string> = {
   1: "Thu thập dữ liệu",
   2: "Phân tích & Layout",
@@ -213,7 +236,9 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  app.use("/generated", (await import("express")).default.static(GEN_DIR));
+  const expressStatic = (await import("express")).default.static;
+  app.use("/generated", expressStatic(GEN_DIR));
+  app.use("/uploads", expressStatic(UPLOAD_DIR));
 
   app.get("/api/projects", async (_req, res) => {
     const allProjects = await storage.getProjects();
@@ -258,6 +283,26 @@ export async function registerRoutes(
     if (!existing) return res.status(404).json({ message: "Project not found" });
     await storage.deleteProject(id);
     res.status(204).send();
+  });
+
+  app.post("/api/upload", upload.array("files", 10), async (req, res) => {
+    try {
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) {
+        return res.status(400).json({ message: "No files uploaded" });
+      }
+      const uploaded = files.map(f => ({
+        originalName: f.originalname,
+        filename: f.filename,
+        url: `/uploads/${f.filename}`,
+        size: f.size,
+        type: f.mimetype,
+      }));
+      res.json({ files: uploaded });
+    } catch (err) {
+      console.error("Upload error:", err);
+      res.status(500).json({ message: "Upload failed" });
+    }
   });
 
   app.post("/api/projects/:id/step/:step/submit", async (req, res) => {
