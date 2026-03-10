@@ -500,29 +500,34 @@ Trả lời chi tiết kỹ thuật.` }
       } else if (step === 4) {
         const facadeStyle = project.facadeStyle || project.style;
 
-        const facadeUrl1 = await aiGenerateImage(
-          `Exterior facade of a beautiful ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture style, ${project.landWidth}m wide, daytime, professional architectural visualization, photorealistic, lush landscaping, clean modern design`,
-          id, "facade_day"
-        );
+        const facadePrompts = [
+          { name: "facade_day", prompt: `Exterior facade of a beautiful ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture style, ${project.landWidth}m wide frontage, daytime with blue sky, professional architectural visualization, photorealistic, lush tropical landscaping, clean design` },
+          { name: "facade_night", prompt: `Exterior facade of a beautiful ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture style, ${project.landWidth}m wide, night time with warm interior lighting glowing through windows, professional architectural visualization, photorealistic, ambient outdoor lighting` },
+          { name: "facade_angle45", prompt: `45-degree angle view of a ${project.floors}-story Vietnamese residential house, ${facadeStyle} style, showing side wall and front facade, ${project.landWidth}m x ${project.landLength}m lot, daytime, lush garden, professional 3D render, photorealistic` },
+          { name: "facade_aerial", prompt: `Aerial bird's eye view of a ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture, showing rooftop and surrounding landscape, ${project.landWidth}m x ${project.landLength}m lot, professional architectural visualization, photorealistic, urban context` },
+        ];
 
-        const facadeUrl2 = await aiGenerateImage(
-          `Exterior facade of a beautiful ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture style, ${project.landWidth}m wide, night time with warm interior lighting, professional architectural visualization, photorealistic`,
-          id, "facade_night"
-        );
+        const facadeImages: string[] = [];
+        for (const fp of facadePrompts) {
+          const url = await aiGenerateImage(fp.prompt, id, fp.name);
+          facadeImages.push(url);
+        }
 
         const designText = await aiChat([
-          { role: "system", content: "Bạn là kiến trúc sư AI chuyên thiết kế mặt tiền nhà Việt Nam." },
-          { role: "user", content: `Mô tả chi tiết thiết kế mặt tiền phong cách ${facadeStyle} cho nhà ${project.floors} tầng, ${project.landWidth}m rộng:
-- Vật liệu mặt tiền
-- Tỷ lệ cửa sổ
-- Mái và chi tiết kiến trúc
-- Màu sắc chủ đạo
-- Cây xanh trang trí` }
-        ]);
+          { role: "system", content: "Bạn là kiến trúc sư AI chuyên thiết kế mặt tiền nhà Việt Nam. Trả lời chi tiết bằng tiếng Việt." },
+          { role: "user", content: `Mô tả chi tiết thiết kế mặt tiền phong cách ${facadeStyle} cho nhà ${project.floors} tầng, ${project.landWidth}m rộng, ${project.landLength}m sâu:
+- Vật liệu mặt tiền (cụ thể loại gạch, đá, sơn, kính)
+- Tỷ lệ cửa sổ và cửa đi
+- Mái và chi tiết kiến trúc đặc trưng
+- Hệ thống ban công, lam che nắng
+- Màu sắc chủ đạo và phối màu
+- Cây xanh trang trí mặt tiền
+- Hệ thống chiếu sáng ngoại thất` }
+        ], 3000);
 
         result = {
           facadeStyle,
-          facadeImages: [facadeUrl1, facadeUrl2],
+          facadeImages,
           designDescription: designText,
         };
 
@@ -532,7 +537,7 @@ Trả lời chi tiết kỹ thuật.` }
           { role: "user", content: `Thiết kế nội thất chi tiết cho dự án:
 ${ctx}
 
-Cho mỗi phòng (phòng khách, phòng ngủ master, bếp, WC), hãy đề xuất:
+Cho mỗi phòng (phòng khách, phòng ngủ master, bếp, WC, ban công/sân thượng), hãy đề xuất:
 1. Vật liệu sàn, tường, trần
 2. Đồ nội thất cụ thể (tên, kích thước, giá ước tính VND)
 3. Hệ thống ánh sáng
@@ -541,30 +546,34 @@ Cho mỗi phòng (phòng khách, phòng ngủ master, bếp, WC), hãy đề xu�
 Trả lời chi tiết, có số liệu cụ thể.` }
         ], 3000);
 
-        const interiorUrl = await aiGenerateImage(
-          `Interior design of a luxurious Vietnamese ${project.style} style living room, modern furniture, natural wood materials, warm lighting, indoor plants, professional interior photography, photorealistic, 4K quality`,
-          id, "interior_living"
-        );
+        const interiorPrompts = [
+          { name: "Phòng khách", key: "interior_living", prompt: `Interior design of a luxurious Vietnamese ${project.style} style living room, modern furniture, natural wood materials, warm lighting, indoor plants, professional interior photography, photorealistic, 4K quality` },
+          { name: "Phòng ngủ Master", key: "interior_bedroom", prompt: `Interior design of a beautiful ${project.style} style master bedroom, Vietnamese residential, elegant bed, warm ambient lighting, natural materials, cozy atmosphere, professional interior photography` },
+          { name: "Phòng bếp", key: "interior_kitchen", prompt: `Modern Vietnamese ${project.style} style kitchen interior, beautiful cabinetry, island counter, natural materials, pendant lighting, tiled backsplash, professional interior photography, photorealistic` },
+          { name: "Phòng tắm", key: "interior_bathroom", prompt: `Luxurious Vietnamese ${project.style} style bathroom, marble tiles, rain shower, freestanding bathtub, warm lighting, natural stone accents, professional interior photography, photorealistic` },
+          { name: "Ban công / Sân thượng", key: "interior_balcony", prompt: `Beautiful ${project.style} style balcony terrace of Vietnamese house, outdoor lounge furniture, tropical plants, city view, warm evening lighting, professional architectural photography` },
+        ];
 
-        const bedroomUrl = await aiGenerateImage(
-          `Interior design of a beautiful ${project.style} style master bedroom, Vietnamese residential, elegant bed, warm ambient lighting, natural materials, cozy atmosphere, professional interior photography`,
-          id, "interior_bedroom"
-        );
+        const interiorImages: Array<{name: string; url: string}> = [];
+        for (const ip of interiorPrompts) {
+          const url = await aiGenerateImage(ip.prompt, id, ip.key);
+          interiorImages.push({ name: ip.name, url });
+        }
 
         result = {
           interiorDescription: interiorText,
-          interiorImages: [
-            { name: "Phòng khách", url: interiorUrl },
-            { name: "Phòng ngủ Master", url: bedroomUrl },
-          ],
+          interiorImages,
           estimatedCost: `${Math.round(area * project.floors * 8.5)} triệu VND`,
         };
 
       } else if (step === 6) {
         const renderPrompts = [
           { name: "Mặt tiền ban ngày", prompt: `Photorealistic exterior render of a ${project.floors}-story ${project.style} Vietnamese house, ${project.landWidth}m x ${project.landLength}m lot, daytime, beautiful landscaping, blue sky, professional architectural visualization, 8K quality` },
-          { name: "Phòng khách", prompt: `Photorealistic interior render of a spacious ${project.style} style living room in Vietnamese house, natural light through large windows, modern furniture, warm atmosphere, professional interior visualization` },
-          { name: "Phòng ngủ Master", prompt: `Photorealistic interior render of a ${project.style} style master bedroom, Vietnamese residential, elegant design, warm lighting, comfortable atmosphere, high quality visualization` },
+          { name: "Mặt tiền ban đêm", prompt: `Photorealistic exterior render of a ${project.floors}-story ${project.style} Vietnamese house at night, warm interior lighting, landscape lighting, dramatic sky, professional architectural visualization, 8K quality` },
+          { name: "Phòng khách", prompt: `Photorealistic interior render of a spacious ${project.style} style living room in Vietnamese house, natural light through large windows, modern furniture, warm atmosphere, professional interior visualization, 8K` },
+          { name: "Phòng ngủ Master", prompt: `Photorealistic interior render of a ${project.style} style master bedroom, Vietnamese residential, elegant design, warm lighting, comfortable atmosphere, high quality visualization, 8K` },
+          { name: "Phòng bếp & ăn", prompt: `Photorealistic interior render of a modern ${project.style} Vietnamese kitchen and dining area, open plan, pendant lights, natural wood, marble countertop, professional visualization, 8K` },
+          { name: "Sân vườn & Cảnh quan", prompt: `Photorealistic landscape render of a ${project.floors}-story ${project.style} Vietnamese house garden, tropical plants, stone pathway, outdoor seating area, water feature, professional architectural visualization, 8K` },
         ];
 
         const renders = [];
@@ -588,14 +597,14 @@ Trả lời chi tiết, có số liệu cụ thể.` }
         const totalCost = Math.round(totalArea * 10.5);
 
         const sections = [
-          "Trang bìa & Thông tin dự án",
-          "Phân tích hiện trạng",
-          "Bố trí Layout",
-          "Bản vẽ CAD",
-          "Mô hình 3D & Mặt tiền",
-          "Thiết kế nội thất",
-          "Render phối cảnh",
-          "Dự toán chi phí",
+          "Trang bìa & Mục lục",
+          "Phân tích hiện trạng & Phong thủy",
+          "Bố trí mặt bằng các tầng",
+          "Bản vẽ kỹ thuật CAD",
+          "Thiết kế mặt tiền (4 phối cảnh)",
+          "Thiết kế nội thất (5 phòng)",
+          "Render phối cảnh 3D (6 hình full-page)",
+          "Dự toán chi phí chi tiết",
         ];
 
         let pdfSource = "pdfkit";
@@ -656,7 +665,17 @@ Trả lời chi tiết, có số liệu cụ thể.` }
           const fontRegular = path.join(process.cwd(), "server", "fonts", "Roboto-Regular.ttf");
           const fontBold = path.join(process.cwd(), "server", "fonts", "Roboto-Bold.ttf");
 
-          const doc = new PDFDocument({ size: "A4", margin: 50 });
+          const W = 595.28;
+          const H = 841.89;
+          const M = 50;
+          const CW = W - 2 * M;
+          const NAVY = "#1a365d";
+          const DARK = "#2d3748";
+          const ACCENT = "#3182ce";
+          const GREEN_BG = "#f0fff4";
+          const GREEN_TXT = "#276749";
+
+          const doc = new PDFDocument({ size: "A4", margin: M });
           let pdfKitPages = 1;
           doc.on("pageAdded", () => { pdfKitPages++; });
           const writeStream = fs.createWriteStream(pdfPath);
@@ -667,149 +686,368 @@ Trả lời chi tiết, có số liệu cụ thể.` }
           const fnR = fs.existsSync(fontRegular) ? "VN" : "Helvetica";
           const fnB = fs.existsSync(fontBold) ? "VN-Bold" : "Helvetica-Bold";
 
-          doc.rect(0, 0, doc.page.width, 200).fill("#1a365d");
-          doc.fill("#ffffff").font(fnB).fontSize(32).text("BMT DECOR", 50, 60, { align: "center" });
-          doc.fontSize(14).text("HỆ THỐNG AI THIẾT KẾ KIẾN TRÚC & NỘI THẤT", { align: "center" });
-          doc.moveDown(1);
-          doc.fontSize(10).text("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", { align: "center" });
-
-          doc.fill("#000000").font(fnB).fontSize(20).text("", 50, 230);
-          doc.text("HỒ SƠ THIẾT KẾ KIẾN TRÚC", { align: "center" });
-          doc.moveDown(2);
-
-          doc.font(fnR).fontSize(13);
-          const infoItems = [
-            ["Dự án", project.title],
-            ["Khách hàng", project.clientName || "N/A"],
-            ["Kích thước đất", `${project.landWidth}m × ${project.landLength}m (${area} m²)`],
-            ["Số tầng", `${project.floors} tầng`],
-            ["Phòng ngủ", `${project.bedrooms} phòng`],
-            ["Phong cách", project.style],
-            ["Ngân sách", `${project.budget} triệu VNĐ`],
-          ];
-          for (const [label, value] of infoItems) {
-            doc.font(fnB).text(`${label}: `, { continued: true });
-            doc.font(fnR).text(String(value));
-            doc.moveDown(0.3);
-          }
-          doc.moveDown(1);
-          doc.fontSize(9).fillColor("#666666").text(`Ngày tạo: ${new Date().toLocaleDateString("vi-VN")}`, { align: "right" });
-          doc.fillColor("#000000");
-
-          const sectionTitle = (num: number, title: string) => {
-            doc.addPage();
-            doc.rect(0, 0, doc.page.width, 50).fill("#2d3748");
-            doc.fill("#ffffff").font(fnB).fontSize(16).text(`${num}. ${title}`, 50, 18);
-            doc.fill("#000000").font(fnR).fontSize(11).text("", 50, 70);
+          const addHeaderFooter = (pageNum: number, totalPages: number) => {
+            doc.save();
+            doc.rect(0, H - 35, W, 35).fill(NAVY);
+            doc.fill("#ffffff").font(fnR).fontSize(7)
+              .text("BMT DECOR — Hệ thống AI Thiết kế Kiến trúc & Nội thất", M, H - 25, { width: CW - 60 })
+              .text(`Trang ${pageNum}`, W - 100, H - 25, { width: 50, align: "right" });
+            doc.restore();
           };
 
-          const addImage = (imgUrl: string) => {
-            if (imgUrl && imgUrl.startsWith("/generated/")) {
+          let embeddedImageCount = 0;
+
+          const resolveImage = (imgUrl: string): string | null => {
+            if (!imgUrl) return null;
+            if (imgUrl.startsWith("/generated/")) {
               const safeFile = path.basename(imgUrl.replace("/generated/", ""));
               const imgPath = path.join(GEN_DIR, safeFile);
-              if (fs.existsSync(imgPath)) {
-                try {
-                  doc.moveDown(0.5);
-                  doc.image(imgPath, { fit: [500, 400], align: "center" });
-                  doc.moveDown(0.5);
-                } catch (e) { console.error("PDF image embed error:", e); }
-              }
+              return fs.existsSync(imgPath) ? imgPath : null;
             }
+            if (imgUrl.startsWith("/uploads/")) {
+              const safeFile = path.basename(imgUrl.replace("/uploads/", ""));
+              const imgPath = path.join(process.cwd(), "public", "uploads", safeFile);
+              return fs.existsSync(imgPath) ? imgPath : null;
+            }
+            if (imgUrl.startsWith("http://") || imgUrl.startsWith("https://")) {
+              try {
+                const tmpFile = path.join(GEN_DIR, `tmp_pdf_${Date.now()}_${Math.random().toString(36).slice(2)}.png`);
+                const { execSync } = require("child_process");
+                execSync(`curl -sL -o "${tmpFile}" "${imgUrl}"`, { timeout: 15000 });
+                return fs.existsSync(tmpFile) && fs.statSync(tmpFile).size > 100 ? tmpFile : null;
+              } catch { return null; }
+            }
+            return null;
           };
 
-          sectionTitle(1, "PHÂN TÍCH HIỆN TRẠNG");
-          if (analysis?.aiAnalysis) {
-            doc.font(fnR).fontSize(10).text(String(analysis.aiAnalysis).substring(0, 3000));
-          } else if (analysis) {
-            doc.font(fnR).fontSize(10).text(JSON.stringify(analysis, null, 2).substring(0, 2000));
+          const addFullPageImage = (imgUrl: string, caption: string) => {
+            const imgPath = resolveImage(imgUrl);
+            if (!imgPath) { console.warn(`PDF: Missing image for "${caption}"`); return; }
+            try {
+              doc.addPage();
+              doc.image(imgPath, 0, 0, { width: W, height: H - 70 });
+              doc.save(); doc.opacity(0.85); doc.rect(0, H - 70, W, 70).fill(NAVY); doc.opacity(1); doc.restore();
+              doc.fill("#ffffff").font(fnB).fontSize(13).text(caption, M, H - 55, { width: CW, align: "center" });
+              doc.font(fnR).fontSize(9).text(project.title, M, H - 35, { width: CW, align: "center" });
+              embeddedImageCount++;
+            } catch (e) { console.error("PDF full-page image error:", e); }
+          };
+
+          const addImageWithCaption = (imgUrl: string, caption: string, fitW = 480, fitH = 600) => {
+            const imgPath = resolveImage(imgUrl);
+            if (!imgPath) { console.warn(`PDF: Missing image for "${caption}"`); return; }
+            try {
+              doc.addPage();
+              const topY = 60;
+              doc.font(fnB).fontSize(12).fill(DARK).text(caption, M, topY, { width: CW, align: "center" });
+              doc.moveDown(0.5);
+              const imgY = doc.y;
+              doc.image(imgPath, (W - fitW) / 2, imgY, { fit: [fitW, fitH], align: "center" });
+              embeddedImageCount++;
+            } catch (e) { console.error("PDF image embed error:", e); }
+          };
+
+          const sectionDivider = (num: number, title: string, subtitle?: string) => {
+            doc.addPage();
+            doc.rect(0, 0, W, H).fill(NAVY);
+            doc.fill("#ffffff").font(fnB).fontSize(60).text(`0${num}`, M, H / 2 - 100, { width: CW, align: "center" });
+            doc.fontSize(28).text(title, M, H / 2 - 20, { width: CW, align: "center" });
+            if (subtitle) {
+              doc.moveDown(0.5);
+              doc.font(fnR).fontSize(14).text(subtitle, { width: CW, align: "center" });
+            }
+            doc.rect(W / 2 - 40, H / 2 + 60, 80, 3).fill(ACCENT);
+          };
+
+          const sectionContent = (title: string) => {
+            doc.addPage();
+            doc.rect(0, 0, W, 55).fill(DARK);
+            doc.fill("#ffffff").font(fnB).fontSize(15).text(title, M, 18, { width: CW });
+            doc.fill("#000000").font(fnR).fontSize(10).text("", M, 70);
+          };
+
+          // ===================== PAGE 1: COVER =====================
+          doc.rect(0, 0, W, H).fill(NAVY);
+          doc.rect(M - 10, 80, CW + 20, 3).fill(ACCENT);
+          doc.fill("#ffffff").font(fnB).fontSize(42).text("BMT DECOR", M, 110, { width: CW, align: "center" });
+          doc.font(fnR).fontSize(14).text("HỆ THỐNG AI THIẾT KẾ KIẾN TRÚC & NỘI THẤT", { width: CW, align: "center" });
+          doc.moveDown(3);
+          doc.rect(M - 10, doc.y, CW + 20, 3).fill(ACCENT);
+          doc.moveDown(2);
+          doc.font(fnB).fontSize(26).text("PHƯƠNG ÁN THIẾT KẾ", { width: CW, align: "center" });
+          doc.moveDown(0.5);
+          doc.font(fnB).fontSize(22).fill("#90cdf4").text(project.title.toUpperCase(), { width: CW, align: "center" });
+          doc.fill("#ffffff");
+          doc.moveDown(3);
+          doc.font(fnR).fontSize(13);
+          const coverInfo = [
+            `Khách hàng: ${project.clientName || "N/A"}`,
+            `Kích thước: ${project.landWidth}m × ${project.landLength}m (${area} m²)`,
+            `Quy mô: ${project.floors} tầng — ${project.bedrooms} phòng ngủ`,
+            `Phong cách: ${project.style}`,
+            `Ngân sách: ${project.budget} triệu VNĐ`,
+          ];
+          for (const line of coverInfo) {
+            doc.text(line, { width: CW, align: "center" });
+            doc.moveDown(0.4);
+          }
+          doc.moveDown(2);
+          doc.rect(M - 10, doc.y, CW + 20, 1).fill("#4a5568");
+          doc.moveDown(1);
+          doc.fill("#a0aec0").font(fnR).fontSize(10).text(`Ngày lập: ${new Date().toLocaleDateString("vi-VN")}`, { width: CW, align: "center" });
+
+          // Cover image if available (first facade image)
+          const coverImgUrl = model3d?.facadeImages?.[0] || renderResult?.renders?.[0]?.url;
+          if (coverImgUrl) {
+            const coverImgPath = resolveImage(coverImgUrl);
+            if (coverImgPath) {
+              try {
+                doc.addPage();
+                doc.image(coverImgPath, 0, 0, { width: W, height: H });
+                doc.save(); doc.opacity(0.9); doc.rect(0, H - 80, W, 80).fill(NAVY); doc.opacity(1); doc.restore();
+                doc.fill("#ffffff").font(fnB).fontSize(16).text("PHỐI CẢNH TỔNG THỂ", M, H - 65, { width: CW, align: "center" });
+                doc.font(fnR).fontSize(11).text(project.title, { width: CW, align: "center" });
+              } catch (e) { console.error("Cover image error:", e); }
+            }
           }
 
-          sectionTitle(2, "BỐ TRÍ LAYOUT");
+          // ===================== PAGE: TABLE OF CONTENTS =====================
+          doc.addPage();
+          doc.rect(0, 0, W, 55).fill(NAVY);
+          doc.fill("#ffffff").font(fnB).fontSize(20).text("MỤC LỤC", M, 16, { width: CW, align: "center" });
+          doc.fill("#000000");
+          doc.font(fnR).fontSize(12).text("", M, 80);
+          const tocItems = [
+            { num: "01", title: "PHÂN TÍCH HIỆN TRẠNG", sub: "Đánh giá khu đất, phong thủy, quy hoạch" },
+            { num: "02", title: "BỐ TRÍ MẶT BẰNG", sub: "Layout các tầng, phân chia phòng chức năng" },
+            { num: "03", title: "BẢN VẼ KỸ THUẬT", sub: "Bản vẽ CAD, kết cấu, hệ thống kỹ thuật" },
+            { num: "04", title: "THIẾT KẾ MẶT TIỀN", sub: "Kiến trúc ngoại thất, vật liệu, phối cảnh" },
+            { num: "05", title: "THIẾT KẾ NỘI THẤT", sub: "Nội thất từng phòng, vật liệu, màu sắc" },
+            { num: "06", title: "RENDER PHỐI CẢNH", sub: "Hình ảnh 3D photorealistic chất lượng cao" },
+            { num: "07", title: "DỰ TOÁN CHI PHÍ", sub: "Chi phí xây dựng, nội thất, tổng dự toán" },
+          ];
+          for (const item of tocItems) {
+            doc.moveDown(0.8);
+            doc.font(fnB).fontSize(18).fill(ACCENT).text(item.num, M, doc.y, { continued: true });
+            doc.fill(DARK).fontSize(14).text(`   ${item.title}`);
+            doc.font(fnR).fontSize(10).fill("#718096").text(`      ${item.sub}`);
+            doc.fill("#000000");
+            doc.moveDown(0.3);
+            doc.rect(M, doc.y, CW, 0.5).fill("#e2e8f0");
+          }
+
+          // ===================== SECTION 1: ANALYSIS =====================
+          sectionDivider(1, "PHÂN TÍCH HIỆN TRẠNG", "Đánh giá khu đất & yêu cầu thiết kế");
+          sectionContent("1. PHÂN TÍCH HIỆN TRẠNG");
+          doc.font(fnB).fontSize(12).fill(DARK).text("THÔNG TIN DỰ ÁN");
+          doc.moveDown(0.5);
+          doc.font(fnR).fontSize(10).fill("#000000");
+          const projectDetails = [
+            ["Tên dự án", project.title],
+            ["Khách hàng", project.clientName || "N/A"],
+            ["Kích thước đất", `${project.landWidth}m × ${project.landLength}m = ${area} m²`],
+            ["Số tầng", `${project.floors} tầng`],
+            ["Phòng ngủ", `${project.bedrooms} phòng`],
+            ["Phong cách thiết kế", project.style],
+            ["Ngân sách dự kiến", `${project.budget} triệu VNĐ`],
+          ];
+          for (let pi = 0; pi < projectDetails.length; pi++) {
+            const [label, value] = projectDetails[pi];
+            const y = doc.y;
+            doc.rect(M, y, CW, 22).fill(pi % 2 === 0 ? "#f7fafc" : "#ffffff");
+            doc.fill("#000000").font(fnB).fontSize(10).text(label, M + 10, y + 5, { width: 200 });
+            doc.font(fnR).text(String(value), M + 220, y + 5, { width: CW - 230 });
+          }
+          doc.moveDown(1.5);
+          if (analysis?.aiAnalysis) {
+            doc.font(fnB).fontSize(12).fill(DARK).text("PHÂN TÍCH AI");
+            doc.moveDown(0.5);
+            doc.font(fnR).fontSize(9.5).fill("#000000").text(String(analysis.aiAnalysis).substring(0, 4000));
+          } else if (analysis) {
+            doc.font(fnR).fontSize(9.5).text(JSON.stringify(analysis, null, 2).substring(0, 3000));
+          }
+
+          // ===================== SECTION 2: LAYOUT =====================
+          sectionDivider(2, "BỐ TRÍ MẶT BẰNG", "Layout các tầng & phân chia chức năng");
+          sectionContent("2. BỐ TRÍ MẶT BẰNG");
           if (layout?.floors) {
             for (const fl of layout.floors) {
-              doc.font(fnB).fontSize(12).text(`Tầng ${fl.floor}:`);
+              doc.font(fnB).fontSize(13).fill(ACCENT).text(`TẦNG ${fl.floor}`);
               doc.moveDown(0.3);
+              doc.rect(M, doc.y, CW, 1).fill(ACCENT);
+              doc.moveDown(0.4);
+              let totalFloorArea = 0;
               for (const room of fl.rooms) {
-                doc.font(fnR).fontSize(10).text(`  • ${room.name}: ${room.w}m × ${room.h}m (${(room.w * room.h).toFixed(1)} m²)`);
+                const roomArea = room.w * room.h;
+                totalFloorArea += roomArea;
+                const y = doc.y;
+                doc.rect(M, y, CW, 20).fill("#f7fafc");
+                doc.fill("#000000").font(fnR).fontSize(10);
+                doc.text(`• ${room.name}`, M + 10, y + 4, { width: 200 });
+                doc.text(`${room.w}m × ${room.h}m`, M + 220, y + 4, { width: 100 });
+                doc.font(fnB).text(`${roomArea.toFixed(1)} m²`, M + 340, y + 4, { width: 80 });
+                doc.y = y + 22;
               }
-              doc.moveDown(0.5);
+              doc.moveDown(0.3);
+              doc.font(fnB).fontSize(10).fill(GREEN_TXT).text(`Tổng diện tích tầng ${fl.floor}: ${totalFloorArea.toFixed(1)} m²`);
+              doc.fill("#000000");
+              doc.moveDown(1);
+              if (doc.y > H - 150) { sectionContent("2. BỐ TRÍ MẶT BẰNG (tiếp)"); }
             }
           } else if (layout) {
-            doc.font(fnR).fontSize(10).text(JSON.stringify(layout, null, 2).substring(0, 2000));
+            doc.font(fnR).fontSize(10).text(JSON.stringify(layout, null, 2).substring(0, 3000));
           }
 
-          sectionTitle(3, "BẢN VẼ CAD");
+          // ===================== SECTION 3: CAD =====================
+          sectionDivider(3, "BẢN VẼ KỸ THUẬT", "Bản vẽ CAD & thông số kỹ thuật");
+          sectionContent("3. BẢN VẼ KỸ THUẬT");
           if (cad?.cadDescription) {
-            doc.font(fnR).fontSize(10).text(cad.cadDescription.substring(0, 3000));
+            doc.font(fnR).fontSize(9.5).text(cad.cadDescription.substring(0, 4000));
           }
           if (cad?.cadDrawings) {
             for (const drawing of cad.cadDrawings) {
-              if (drawing.name) { doc.moveDown(0.5); doc.font(fnB).fontSize(11).text(drawing.name); }
-              if (drawing.imageUrl) addImage(drawing.imageUrl);
+              if (drawing.imageUrl) {
+                addImageWithCaption(drawing.imageUrl, drawing.name || "Bản vẽ kỹ thuật");
+              }
             }
           }
 
-          sectionTitle(4, "MÔ HÌNH 3D & MẶT TIỀN");
+          // ===================== SECTION 4: FACADE =====================
+          sectionDivider(4, "THIẾT KẾ MẶT TIỀN", "Kiến trúc ngoại thất & phối cảnh");
+          sectionContent("4. THIẾT KẾ MẶT TIỀN");
           if (model3d?.designDescription) {
-            doc.font(fnR).fontSize(10).text(model3d.designDescription.substring(0, 3000));
+            doc.font(fnR).fontSize(9.5).text(model3d.designDescription.substring(0, 4000));
           }
+          const facadeLabels = ["Mặt tiền ban ngày", "Mặt tiền ban đêm", "Góc nhìn 45°", "Phối cảnh tổng thể"];
           if (model3d?.facadeImages) {
-            for (const imgUrl of model3d.facadeImages) addImage(imgUrl);
+            for (let i = 0; i < model3d.facadeImages.length; i++) {
+              const label = facadeLabels[i] || `Phối cảnh mặt tiền ${i + 1}`;
+              addFullPageImage(model3d.facadeImages[i], label);
+            }
           }
 
-          sectionTitle(5, "THIẾT KẾ NỘI THẤT");
+          // ===================== SECTION 5: INTERIOR =====================
+          sectionDivider(5, "THIẾT KẾ NỘI THẤT", "Nội thất từng phòng & vật liệu hoàn thiện");
+          sectionContent("5. THIẾT KẾ NỘI THẤT");
           if (interior?.interiorDescription) {
-            doc.font(fnR).fontSize(10).text(interior.interiorDescription.substring(0, 3000));
+            doc.font(fnR).fontSize(9.5).text(interior.interiorDescription.substring(0, 4000));
           }
           if (interior?.interiorImages) {
             for (const img of interior.interiorImages) {
-              if (img.name) { doc.moveDown(0.5); doc.font(fnB).fontSize(11).text(img.name); }
-              addImage(img.url);
+              addFullPageImage(img.url, img.name || "Thiết kế nội thất");
             }
           }
 
-          sectionTitle(6, "RENDER PHỐI CẢNH");
+          // ===================== SECTION 6: RENDERS =====================
+          sectionDivider(6, "RENDER PHỐI CẢNH", "Hình ảnh 3D photorealistic chất lượng cao");
           if (renderResult?.renders) {
             for (const r of renderResult.renders) {
-              doc.font(fnB).fontSize(11).text(r.name);
-              addImage(r.url);
+              addFullPageImage(r.url, r.name);
             }
           }
 
-          sectionTitle(7, "DỰ TOÁN CHI PHÍ");
-          doc.font(fnR).fontSize(11);
-          const costItems = [
-            ["Tổng diện tích xây dựng", `${totalArea} m²`],
-            ["Đơn giá xây dựng ước tính", "6 - 10 triệu VNĐ/m²"],
-            ["Chi phí xây dựng thô", `${buildCost.toLocaleString("vi-VN")} triệu VNĐ`],
-            ["Chi phí nội thất", `${interiorCost.toLocaleString("vi-VN")} triệu VNĐ`],
-          ];
-          for (const [label, value] of costItems) {
-            doc.font(fnR).text(`${label}: `, { continued: true });
-            doc.font(fnB).text(String(value));
-            doc.moveDown(0.3);
-          }
-          doc.moveDown(0.5);
-          doc.rect(50, doc.y, 495, 35).fill("#f0fff4");
-          doc.fill("#276749").font(fnB).fontSize(14).text(`TỔNG DỰ TOÁN: ${totalCost.toLocaleString("vi-VN")} triệu VNĐ`, 60, doc.y - 28);
-          doc.fill("#000000");
-          doc.moveDown(2);
-          doc.font(fnR).fontSize(9).fillColor("#888888").text("Lưu ý: Đây là ước tính sơ bộ. Chi phí thực tế có thể thay đổi tùy theo vật liệu và nhà thầu.", { italic: true });
-          doc.fillColor("#000000");
+          // ===================== SECTION 7: COST ESTIMATE =====================
+          sectionDivider(7, "DỰ TOÁN CHI PHÍ", "Chi phí xây dựng & nội thất dự kiến");
+          sectionContent("7. DỰ TOÁN CHI PHÍ");
 
-          doc.addPage();
-          doc.rect(0, doc.page.height - 100, doc.page.width, 100).fill("#1a365d");
-          doc.fill("#ffffff").font(fnB).fontSize(14).text("BMT DECOR", 50, doc.page.height - 80, { align: "center" });
-          doc.font(fnR).fontSize(10).text("Hệ thống AI Thiết kế Kiến trúc & Nội thất", { align: "center" });
+          doc.font(fnB).fontSize(13).fill(DARK).text("BẢNG DỰ TOÁN CHI PHÍ");
           doc.moveDown(0.5);
-          doc.fontSize(9).text("Cảm ơn quý khách đã tin tưởng sử dụng dịch vụ", { align: "center" });
+
+          const tableTop = doc.y;
+          const colWidths = [30, 220, 100, 145];
+          const tableHeaders = ["STT", "Hạng mục", "Đơn vị", "Thành tiền (triệu VNĐ)"];
+          let tx = M;
+          doc.rect(M, tableTop, CW, 28).fill(NAVY);
+          for (let i = 0; i < tableHeaders.length; i++) {
+            doc.fill("#ffffff").font(fnB).fontSize(9).text(tableHeaders[i], tx + 5, tableTop + 8, { width: colWidths[i] - 10 });
+            tx += colWidths[i];
+          }
+          doc.y = tableTop + 28;
+
+          const costRows = [
+            ["1", "Chi phí xây dựng phần thô", `${totalArea} m²`, `${buildCost.toLocaleString("vi-VN")}`],
+            ["2", "Chi phí hoàn thiện ngoại thất", `${totalArea} m²`, `${Math.round(totalArea * 1.5).toLocaleString("vi-VN")}`],
+            ["3", "Chi phí thiết kế nội thất", `${totalArea} m²`, `${interiorCost.toLocaleString("vi-VN")}`],
+            ["4", "Hệ thống điện - nước", "1 hệ thống", `${Math.round(totalArea * 0.8).toLocaleString("vi-VN")}`],
+            ["5", "Cảnh quan sân vườn", `${area} m²`, `${Math.round(area * 0.5).toLocaleString("vi-VN")}`],
+            ["6", "Chi phí thiết kế kiến trúc", "1 gói", `${Math.round(totalCost * 0.05).toLocaleString("vi-VN")}`],
+            ["7", "Chi phí quản lý dự án", "1 gói", `${Math.round(totalCost * 0.03).toLocaleString("vi-VN")}`],
+          ];
+
+          for (let r = 0; r < costRows.length; r++) {
+            const ry = doc.y;
+            doc.rect(M, ry, CW, 24).fill(r % 2 === 0 ? "#f7fafc" : "#ffffff");
+            tx = M;
+            for (let c = 0; c < costRows[r].length; c++) {
+              doc.fill("#000000").font(c === 0 ? fnB : fnR).fontSize(9).text(costRows[r][c], tx + 5, ry + 6, { width: colWidths[c] - 10 });
+              tx += colWidths[c];
+            }
+            doc.y = ry + 24;
+          }
+
+          const grandTotal = totalCost + Math.round(totalArea * 1.5) + Math.round(totalArea * 0.8) + Math.round(area * 0.5) + Math.round(totalCost * 0.08);
+          doc.moveDown(0.5);
+          doc.rect(M, doc.y, CW, 40).fill(GREEN_BG);
+          const gtY = doc.y;
+          doc.fill(GREEN_TXT).font(fnB).fontSize(14).text(`TỔNG DỰ TOÁN: ${grandTotal.toLocaleString("vi-VN")} triệu VNĐ`, M + 15, gtY + 12, { width: CW - 30, align: "center" });
+          doc.y = gtY + 50;
+          doc.fill("#000000");
+
+          doc.moveDown(1);
+          doc.font(fnR).fontSize(9).fill("#718096");
+          doc.text("Lưu ý:");
+          doc.text("• Đây là ước tính sơ bộ dựa trên đơn giá trung bình khu vực Tây Nguyên.");
+          doc.text("• Chi phí thực tế có thể thay đổi ±15% tùy theo vật liệu và nhà thầu thi công.");
+          doc.text("• Chưa bao gồm chi phí giấy phép xây dựng và thuế.");
+          doc.fill("#000000");
+
+          // ===================== FINAL PAGE: CONTACT & COMMITMENT =====================
+          doc.addPage();
+          doc.rect(0, 0, W, H).fill(NAVY);
+          doc.fill("#ffffff").font(fnB).fontSize(36).text("BMT DECOR", M, 120, { width: CW, align: "center" });
+          doc.moveDown(0.5);
+          doc.font(fnR).fontSize(14).text("Hệ thống AI Thiết kế Kiến trúc & Nội thất", { width: CW, align: "center" });
+          doc.moveDown(1);
+          doc.rect(W / 2 - 40, doc.y, 80, 3).fill(ACCENT);
+          doc.moveDown(2);
+
+          doc.font(fnB).fontSize(16).text("CAM KẾT CHẤT LƯỢNG", { width: CW, align: "center" });
+          doc.moveDown(1);
+          doc.font(fnR).fontSize(11);
+          const commitments = [
+            "✓  Thiết kế sáng tạo, phù hợp phong cách & ngân sách khách hàng",
+            "✓  Tư vấn chuyên nghiệp từ đội ngũ kiến trúc sư giàu kinh nghiệm",
+            "✓  Ứng dụng công nghệ AI tiên tiến trong thiết kế & trực quan hóa",
+            "✓  Hỗ trợ giám sát thi công đảm bảo đúng thiết kế",
+            "✓  Bảo hành thiết kế trong suốt quá trình xây dựng",
+          ];
+          for (const c of commitments) {
+            doc.text(c, { width: CW, align: "center" });
+            doc.moveDown(0.5);
+          }
+
+          doc.moveDown(2);
+          doc.rect(W / 2 - 60, doc.y, 120, 1).fill("#4a5568");
+          doc.moveDown(1.5);
+          doc.font(fnB).fontSize(12).text("LIÊN HỆ", { width: CW, align: "center" });
+          doc.moveDown(0.5);
+          doc.font(fnR).fontSize(10).fill("#a0aec0");
+          doc.text("Email: info@bmtdecor.com", { width: CW, align: "center" });
+          doc.text("Hotline: 0901 234 567", { width: CW, align: "center" });
+          doc.text("Website: www.bmtdecor.com", { width: CW, align: "center" });
+          doc.moveDown(3);
+          doc.font(fnR).fontSize(9).fill("#718096").text("Cảm ơn quý khách đã tin tưởng sử dụng dịch vụ BMT Decor", { width: CW, align: "center" });
+          doc.text(`© ${new Date().getFullYear()} BMT DECOR. All rights reserved.`, { width: CW, align: "center" });
 
           doc.end();
           await new Promise<void>((resolve) => writeStream.on("finish", resolve));
 
           pageCount = pdfKitPages;
           downloadUrl = `/generated/${pdfFilename}`;
-          estimatedSize = `${Math.round(fs.statSync(pdfPath).size / 1024)} KB`;
+          const fileSizeBytes = fs.statSync(pdfPath).size;
+          estimatedSize = fileSizeBytes > 1024 * 1024
+            ? `${(fileSizeBytes / (1024 * 1024)).toFixed(1)} MB`
+            : `${Math.round(fileSizeBytes / 1024)} KB`;
         }
 
         result = {
@@ -818,6 +1056,7 @@ Trả lời chi tiết, có số liệu cụ thể.` }
           sections,
           estimatedSize,
           pdfSource,
+          embeddedImages: embeddedImageCount || 0,
         };
       }
 
