@@ -1047,11 +1047,11 @@ Trả lời chi tiết, có số liệu cụ thể.` }
           doc.font(fnB).fontSize(12).text("LIÊN HỆ", { width: CW, align: "center" });
           doc.moveDown(0.5);
           doc.font(fnR).fontSize(10).fill("#a0aec0");
-          doc.text("Email: info@bmtdecor.com", { width: CW, align: "center" });
-          doc.text("Hotline: 0901 234 567", { width: CW, align: "center" });
-          doc.text("Website: www.bmtdecor.com", { width: CW, align: "center" });
+          doc.text("Địa chỉ: 7/92, Thành Thái, Phường 14, Quận 10, TP.HCM", { width: CW, align: "center" });
+          doc.text("Director: Võ Quốc Bảo", { width: CW, align: "center" });
+          doc.text("Website: thicongtramsac.vn", { width: CW, align: "center" });
           doc.moveDown(3);
-          doc.font(fnR).fontSize(9).fill("#718096").text("Cảm ơn quý khách đã tin tưởng sử dụng dịch vụ BMT Decor", { width: CW, align: "center" });
+          doc.font(fnR).fontSize(9).fill("#718096").text("Cảm ơn quý khách đã tin tưởng sử dụng dịch vụ CÔNG TY TNHH TMDV BMT DECOR", { width: CW, align: "center" });
           doc.text(`© ${new Date().getFullYear()} BMT DECOR. All rights reserved.`, { width: CW, align: "center" });
 
           doc.end();
@@ -1459,9 +1459,16 @@ Trả lời chi tiết, có số liệu cụ thể.` }
       ]) {
         doc.text(c, { width: CW, align: "center" }); doc.moveDown(0.5);
       }
+      doc.moveDown(1);
+      doc.font(fnB).fontSize(12).text("LIÊN HỆ", { width: CW, align: "center" });
+      doc.moveDown(0.5);
+      doc.font(fnR).fontSize(10).fill("#a0aec0");
+      doc.text("Địa chỉ: 7/92, Thành Thái, Phường 14, Quận 10, TP.HCM", { width: CW, align: "center" });
+      doc.text("Director: Võ Quốc Bảo", { width: CW, align: "center" });
+      doc.text("Website: thicongtramsac.vn", { width: CW, align: "center" });
       doc.moveDown(2);
-      doc.font(fnR).fontSize(9).fill("#718096").text("Cảm ơn quý khách đã tin tưởng sử dụng dịch vụ BMT Decor", { width: CW, align: "center" });
-      doc.text(`© ${new Date().getFullYear()} BMT DECOR`, { width: CW, align: "center" });
+      doc.font(fnR).fontSize(9).fill("#718096").text("Cảm ơn quý khách đã tin tưởng sử dụng dịch vụ CÔNG TY TNHH TMDV BMT DECOR", { width: CW, align: "center" });
+      doc.text(`© ${new Date().getFullYear()} BMT DECOR. All rights reserved.`, { width: CW, align: "center" });
 
       const safeName = project.title.replace(/[^a-zA-Z0-9_ ]/g, "").replace(/\s+/g, "_") || `project_${id}`;
       const encodedName = encodeURIComponent(`BMT_Decor_${project.title}.pdf`);

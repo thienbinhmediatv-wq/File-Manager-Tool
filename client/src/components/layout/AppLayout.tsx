@@ -1,7 +1,8 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, FolderKanban, Settings, Bell, Building2 } from "lucide-react";
+import { LayoutDashboard, FolderKanban, Settings, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
+import logoImg from "@assets/logo_nobg.png";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -20,12 +21,13 @@ export function AppLayout({ children }: AppLayoutProps) {
     <div className="min-h-screen flex bg-background" data-testid="app-layout">
       <aside className="w-72 fixed inset-y-0 left-0 z-50 glass border-r border-border/50 hidden md:flex flex-col">
         <div className="p-6 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl animated-gradient-bg flex items-center justify-center shadow-lg shadow-primary/30">
-            <Building2 className="w-5 h-5 text-white" />
+          <img src={logoImg} alt="BMT Decor" className="w-10 h-10 object-contain" />
+          <div>
+            <h1 className="text-xl font-bold text-foreground" data-testid="text-brand-name">
+              BMT Decor
+            </h1>
+            <p className="text-[10px] text-muted-foreground leading-tight">AI Kiến trúc & Nội thất</p>
           </div>
-          <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent" data-testid="text-brand-name">
-            Bmt Decor
-          </h1>
         </div>
 
         <nav className="flex-1 px-4 space-y-2 mt-4">
@@ -55,12 +57,10 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         <div className="p-6 border-t border-border/50">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary/10 border-2 border-white shadow-sm overflow-hidden flex items-center justify-center">
-              <span className="text-sm font-bold text-primary">BD</span>
-            </div>
+            <img src={logoImg} alt="BMT Decor" className="w-9 h-9 object-contain" />
             <div className="flex-1">
-              <p className="text-sm font-semibold text-foreground">Bmt Decor</p>
-              <p className="text-xs text-muted-foreground">AI Architecture</p>
+              <p className="text-sm font-semibold text-foreground">CÔNG TY TNHH TMDV</p>
+              <p className="text-xs text-muted-foreground">BMT DECOR</p>
             </div>
           </div>
         </div>
