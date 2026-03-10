@@ -1,8 +1,10 @@
 import { StepWrapper } from "./StepWrapper";
 import type { Project } from "@shared/schema";
-import { FileText, Download, Cloud, HardDrive, BookOpen, Image, Calculator, Home, Paintbrush, Camera, FileCheck } from "lucide-react";
+import { FileText, Download, Cloud, HardDrive, BookOpen, Image, Calculator, Home, Paintbrush, Camera, FileCheck, Mail, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface Props {
   project: Project;
@@ -28,6 +30,11 @@ const sectionDetails = [
 
 export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, isProcessing, isApproving }: Props) {
   const [showPreview, setShowPreview] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [emailSentSuccess, setEmailSentSuccess] = useState(false);
+  const { toast } = useToast();
   const result = project.pdfEstimate as {
     pageCount?: number;
     sections?: string[];
@@ -130,6 +137,67 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, is
                   <Download className="w-5 h-5 mr-2" /> Tải xuống hồ sơ PDF ({result.pageCount || 45} trang)
                 </Button>
               </a>
+
+              <Button
+                variant="outline"
+                className="w-full rounded-xl h-10 border-green-300 text-green-700 hover:bg-green-50"
+                onClick={() => setShowEmailForm(!showEmailForm)}
+                data-testid="button-toggle-email-form"
+              >
+                <Mail className="w-4 h-4 mr-2" />
+                {showEmailForm ? "Ẩn gửi email" : "Gửi hồ sơ qua Email"}
+              </Button>
+
+              {showEmailForm && (
+                <div className="bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-xl p-4 space-y-3">
+                  <p className="text-sm text-green-700 dark:text-green-300 font-medium">Nhập email khách hàng để gửi hồ sơ PDF:</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      value={emailInput}
+                      onChange={(e) => { setEmailInput(e.target.value); setEmailSentSuccess(false); }}
+                      placeholder="example@gmail.com"
+                      className="flex-1 rounded-lg border border-green-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                      data-testid="input-email-recipient"
+                    />
+                    <Button
+                      disabled={!emailInput.trim() || isSendingEmail || emailSentSuccess}
+                      onClick={async () => {
+                        setIsSendingEmail(true);
+                        try {
+                          const res = await apiRequest("POST", `/api/projects/${project.id}/send-email`, { email: emailInput.trim() });
+                          const data = await res.json();
+                          if (data.success) {
+                            setEmailSentSuccess(true);
+                            toast({ title: "Gửi email thành công!", description: data.message });
+                          } else {
+                            toast({ title: "Lỗi gửi email", description: data.message, variant: "destructive" });
+                          }
+                        } catch {
+                          toast({ title: "Lỗi", description: "Không thể gửi email. Vui lòng thử lại.", variant: "destructive" });
+                        } finally {
+                          setIsSendingEmail(false);
+                        }
+                      }}
+                      className="rounded-lg bg-green-600 hover:bg-green-700 text-white px-4"
+                      data-testid="button-send-email"
+                    >
+                      {isSendingEmail ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : emailSentSuccess ? (
+                        <CheckCircle2 className="w-4 h-4" />
+                      ) : (
+                        <Mail className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+                  {emailSentSuccess && (
+                    <p className="text-xs text-green-600 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Đã gửi thành công!
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ) : null

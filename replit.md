@@ -49,7 +49,9 @@ BMT Decor (CÔNG TY TNHH TMDV BMT DECOR) is an AI-powered Vietnamese architectur
 - `POST /api/projects/:id/step/:step/process` - AI process step
 - `POST /api/projects/:id/step/:step/approve` - Approve step
 - `POST /api/projects/:id/step/:step/redo` - Redo step
-- `POST /api/chat` - AI chat with project context + custom instructions + knowledge files
+- `POST /api/chat` - AI chat with project context + custom instructions + knowledge files + auto email PDF
+- `POST /api/projects/:id/send-email` - Send PDF to email address
+- `POST /api/settings/verify-password` - Verify settings page password
 - `GET /api/settings/ai` - Get AI settings
 - `PUT /api/settings/ai` - Update AI instructions
 - `GET /api/knowledge-files` - List knowledge files (metadata only)
@@ -88,9 +90,24 @@ BMT Decor (CÔNG TY TNHH TMDV BMT DECOR) is an AI-powered Vietnamese architectur
 - **Artificial Studio** (`ARTIFICIAL_STUDIO_API_KEY`): Image-to-video generation
 - **PDF Generator API**: Template-based PDF generation (fallback to PDFKit)
 
+## Email Integration
+- 2 Gmail senders with fallback: thienbinhmedia.tv@gmail.com → thuyndp.data2@gmail.com
+- `server/emailService.ts` - Nodemailer Gmail SMTP with fallback logic
+- AI chat auto-detects email requests via [SEND_EMAIL:email] tag in AI response
+- Step 7 has direct "Gửi hồ sơ qua Email" button
+- Professional HTML email template with BMT Decor branding
+
+## Settings Page Password Protection
+- Settings page requires password to access (SETTINGS_PASSWORD env var)
+- Session-based auth (sessionStorage) - persists during browser session
+- Password: stored in SETTINGS_PASSWORD environment variable
+
 ## Environment
 - `DATABASE_URL` - PostgreSQL connection
 - `AI_INTEGRATIONS_OPENAI_BASE_URL` - OpenAI API base URL (via Replit)
 - `AI_INTEGRATIONS_OPENAI_API_KEY` - OpenAI API key (via Replit)
 - `SESSION_SECRET` - Session secret
+- `GMAIL_SENDER` / `GMAIL_SENDER_2` - Sender email addresses
+- `GMAIL_APP_PASSWORD` / `GMAIL_APP_PASSWORD_2` - Gmail App Passwords
+- `SETTINGS_PASSWORD` - Password for Settings page access
 - Stripe credentials managed via Replit Connectors (auto-injected)

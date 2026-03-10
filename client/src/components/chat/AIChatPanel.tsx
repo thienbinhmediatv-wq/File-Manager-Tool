@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Loader2, MessageSquare, Globe, ExternalLink } from "lucide-react";
+import { Send, Bot, User, Loader2, MessageSquare, Globe, ExternalLink, Mail, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -8,6 +8,8 @@ interface ChatMessage {
   content: string;
   timestamp: string;
   searchResults?: Array<{ title: string; link: string; snippet: string }>;
+  emailSent?: boolean;
+  emailResult?: { success: boolean; message: string };
 }
 
 interface AIChatPanelProps {
@@ -112,6 +114,30 @@ export function AIChatPanel({ messages, isLoading, onSendMessage }: AIChatPanelP
                       </div>
                     </a>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {msg.emailResult && (
+              <div className={cn(
+                "ml-9 mt-2 rounded-xl p-3 flex items-center gap-2",
+                msg.emailResult.success
+                  ? "bg-green-50 border border-green-200"
+                  : "bg-red-50 border border-red-200"
+              )} data-testid={`email-status-${i}`}>
+                {msg.emailResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                ) : (
+                  <XCircle className="w-4 h-4 text-red-600 shrink-0" />
+                )}
+                <div className="flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-muted-foreground" />
+                  <p className={cn(
+                    "text-xs font-medium",
+                    msg.emailResult.success ? "text-green-700" : "text-red-700"
+                  )}>
+                    {msg.emailResult.message}
+                  </p>
                 </div>
               </div>
             )}

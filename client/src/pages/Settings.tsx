@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Save, Upload, Trash2, FileText, Brain, CreditCard, Loader2, AlertCircle } from "lucide-react";
+import { Save, Upload, Trash2, FileText, Brain, CreditCard, Loader2, AlertCircle, Lock, Eye, EyeOff } from "lucide-react";
 
 interface KnowledgeFile {
   id: number;
@@ -26,9 +26,38 @@ function formatFileSize(bytes: number) {
 export default function Settings() {
   const { toast } = useToast();
   const [instructions, setInstructions] = useState("");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+
+  const handleVerifyPassword = async () => {
+    setIsVerifying(true);
+    setPasswordError("");
+    try {
+      const res = await apiRequest("POST", "/api/settings/verify-password", { password });
+      const data = await res.json();
+      if (data.success) {
+        setIsAuthenticated(true);
+        sessionStorage.setItem("settings_auth", "true");
+      }
+    } catch {
+      setPasswordError("Mật khẩu không đúng");
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  useEffect(() => {
+    if (sessionStorage.getItem("settings_auth") === "true") {
+      setIsAuthenticated(true);
+    }
+  }, []);
 
   const settingsQuery = useQuery<{ instructions: string }>({
     queryKey: ["/api/settings/ai"],
+    enabled: isAuthenticated,
   });
 
   useEffect(() => {
@@ -39,6 +68,7 @@ export default function Settings() {
 
   const filesQuery = useQuery<KnowledgeFile[]>({
     queryKey: ["/api/knowledge-files"],
+    enabled: isAuthenticated,
   });
 
   const saveMutation = useMutation({
@@ -94,6 +124,59 @@ export default function Settings() {
     };
     input.click();
   };
+
+  if (!isAuthenticated) {
+    return (
+      <AppLayout>
+        <div className="max-w-md mx-auto mt-20" data-testid="page-settings-login">
+          <Card>
+            <CardHeader className="text-center">
+              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <Lock className="w-8 h-8 text-primary" />
+              </div>
+              <CardTitle>Truy cập Cài đặt</CardTitle>
+              <CardDescription>Vui lòng nhập mật khẩu để truy cập trang cài đặt</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); setPasswordError(""); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleVerifyPassword(); }}
+                  placeholder="Nhập mật khẩu..."
+                  className="w-full rounded-xl border border-border px-4 py-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  data-testid="input-settings-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  data-testid="button-toggle-password"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {passwordError && (
+                <p className="text-sm text-red-500 flex items-center gap-1" data-testid="text-password-error">
+                  <AlertCircle className="w-3.5 h-3.5" /> {passwordError}
+                </p>
+              )}
+              <Button
+                onClick={handleVerifyPassword}
+                disabled={!password.trim() || isVerifying}
+                className="w-full rounded-xl h-11"
+                data-testid="button-verify-password"
+              >
+                {isVerifying ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Lock className="w-4 h-4 mr-2" />}
+                Xác nhận
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>

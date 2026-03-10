@@ -8,6 +8,7 @@ import path from "path";
 import PDFDocument from "pdfkit";
 import multer from "multer";
 import * as jose from "jose";
+import { sendPdfEmail } from "./emailService";
 
 const SERPAPI_KEY = process.env.SERPAPI_KEY || "";
 const ARTIFICIAL_STUDIO_KEY = process.env.ARTIFICIAL_STUDIO_API_KEY || "";
@@ -1499,6 +1500,35 @@ Trả lời chi tiết, có số liệu cụ thể.` }
     }
   });
 
+  app.post("/api/projects/:id/send-email", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid project ID" });
+      const { email } = req.body;
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ message: "Email không hợp lệ" });
+      }
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+
+      const protocol = req.protocol || "https";
+      const host = req.get("host") || "localhost:5000";
+      const pdfUrl = `${protocol}://${host}/api/projects/${id}/download-pdf`;
+
+      const pdfResp = await fetch(pdfUrl);
+      if (!pdfResp.ok) {
+        return res.status(500).json({ message: "Không thể tạo PDF" });
+      }
+      const pdfBuffer = Buffer.from(await pdfResp.arrayBuffer());
+
+      const result = await sendPdfEmail(email, project.title, project.clientName, pdfBuffer);
+      res.json(result);
+    } catch (err) {
+      console.error("Send email error:", err);
+      res.status(500).json({ success: false, message: "Gửi email thất bại" });
+    }
+  });
+
   app.post("/api/chat", async (req, res) => {
     try {
       const { projectId, message, step, enableSearch } = req.body;
@@ -1558,6 +1588,11 @@ ${project ? `${buildProjectContext(project as unknown as Record<string, unknown>
 ${searchContext}
 ${knowledgeContext}
 
+QUAN TRỌNG - Gửi email PDF:
+Khi khách hàng cung cấp email và yêu cầu gửi hồ sơ PDF, bạn PHẢI bao gồm tag đặc biệt trong phản hồi: [SEND_EMAIL:địa_chỉ_email@example.com]
+Ví dụ: Nếu khách nói "gửi cho tôi qua email abc@gmail.com", bạn phản hồi kèm tag [SEND_EMAIL:abc@gmail.com] ở cuối tin nhắn.
+Phản hồi nên xác nhận rằng hệ thống đang gửi email, thông tin dự án, và thời gian dự kiến (trong vòng vài phút).
+
 Trả lời ngắn gọn, chuyên nghiệp, bằng tiếng Việt. Đưa ra gợi ý cụ thể và thực tế.
 ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham khảo và trích dẫn nguồn khi phù hợp." : ""}`;
 
@@ -1573,17 +1608,49 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
         { role: "user", content: message },
       ]);
 
+      let emailSent = false;
+      let emailResult: { success: boolean; message: string } | null = null;
+      const emailMatch = reply.match(/\[SEND_EMAIL:([^\]]+)\]/);
+      if (emailMatch && project) {
+        const recipientEmail = emailMatch[1].trim();
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(recipientEmail)) {
+          emailResult = { success: false, message: "Email không hợp lệ" };
+        } else {
+          try {
+            const domain = process.env.REPLIT_DOMAINS?.split(",")[0] || req.get("host") || "localhost:5000";
+            const protocol = domain.includes("localhost") ? "http" : "https";
+            const pdfUrl = `${protocol}://${domain}/api/projects/${project.id}/download-pdf`;
+            const pdfResp = await fetch(pdfUrl);
+            if (pdfResp.ok) {
+              const pdfBuffer = Buffer.from(await pdfResp.arrayBuffer());
+              emailResult = await sendPdfEmail(recipientEmail, project.title, project.clientName, pdfBuffer);
+              emailSent = emailResult.success;
+            } else {
+              emailResult = { success: false, message: "Không thể tạo PDF để gửi email" };
+            }
+          } catch (emailErr) {
+            console.error("Auto email send error:", emailErr);
+            emailResult = { success: false, message: "Gửi email thất bại. Vui lòng thử lại." };
+          }
+        }
+      }
+
+      const cleanReply = reply.replace(/\[SEND_EMAIL:[^\]]+\]/g, "").trim();
+
       if (project) {
         const newHistory = [...chatHistory,
           { role: "user", content: message, timestamp: new Date().toISOString() },
-          { role: "assistant", content: reply, timestamp: new Date().toISOString() },
+          { role: "assistant", content: cleanReply, timestamp: new Date().toISOString() },
         ];
         await storage.updateProject(project.id, { chatHistory: newHistory });
       }
 
       res.json({
-        reply,
+        reply: cleanReply,
         searchResults: searchResults.length > 0 ? searchResults : undefined,
+        emailSent,
+        emailResult: emailResult || undefined,
       });
     } catch (err) {
       console.error("Chat error:", err);
@@ -1660,6 +1727,19 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
       return res.status(400).json({ message: "Invalid step" });
     }
     res.json({ prompt: STEP_PROMPTS[step], stepName: STEP_NAMES[step] });
+  });
+
+  app.post("/api/settings/verify-password", (req, res) => {
+    const { password } = req.body;
+    const correctPassword = process.env.SETTINGS_PASSWORD;
+    if (!correctPassword) {
+      return res.status(500).json({ success: false, message: "Mật khẩu chưa được cấu hình trên hệ thống" });
+    }
+    if (password === correctPassword) {
+      res.json({ success: true });
+    } else {
+      res.status(401).json({ success: false, message: "Mật khẩu không đúng" });
+    }
   });
 
   app.get("/api/settings/ai", async (_req, res) => {

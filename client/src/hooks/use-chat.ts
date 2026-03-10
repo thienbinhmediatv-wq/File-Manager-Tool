@@ -6,6 +6,8 @@ interface ChatMessage {
   content: string;
   timestamp: string;
   searchResults?: Array<{ title: string; link: string; snippet: string }>;
+  emailSent?: boolean;
+  emailResult?: { success: boolean; message: string };
 }
 
 export function useChat(projectId: number) {
@@ -29,6 +31,8 @@ export function useChat(projectId: number) {
         content: data.reply,
         timestamp: new Date().toISOString(),
         searchResults: data.searchResults,
+        emailSent: data.emailSent,
+        emailResult: data.emailResult,
       };
       setMessages(prev => [...prev, aiMsg]);
       return data.reply;

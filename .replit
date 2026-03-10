@@ -50,3 +50,4 @@ PDF_GENERATOR_API_SECRET = "0535a332d61209ed8748de0f9af23680adea57c5574b45eb56e9
 PDF_GENERATOR_WORKSPACE = "tcmedia.copyright@gmail.com"
 GMAIL_SENDER = "thienbinhmedia.tv@gmail.com"
 GMAIL_SENDER_2 = "thuyndp.data2@gmail.com"
+SETTINGS_PASSWORD = "Bao@0206"
