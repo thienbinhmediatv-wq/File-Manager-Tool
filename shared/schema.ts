@@ -36,6 +36,26 @@ export const projects = pgTable("projects", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const aiSettings = pgTable("ai_settings", {
+  id: serial("id").primaryKey(),
+  instructions: text("instructions").notNull().default(""),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const knowledgeFiles = pgTable("knowledge_files", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  originalName: text("original_name").notNull(),
+  content: text("content").notNull(),
+  fileType: text("file_type").notNull().default("text"),
+  fileSize: integer("file_size").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type AiSettings = typeof aiSettings.$inferSelect;
+export type KnowledgeFile = typeof knowledgeFiles.$inferSelect;
+
 export const insertProjectSchema = createInsertSchema(projects).omit({
   id: true,
   createdAt: true,
