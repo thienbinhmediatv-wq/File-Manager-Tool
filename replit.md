@@ -18,6 +18,7 @@ BMT Decor (CÔNG TY TNHH TMDV BMT DECOR) is an AI-powered Vietnamese architectur
 - `server/routes.ts` - All API endpoints (CRUD, step operations, AI chat, settings, knowledge files, Stripe)
 - `server/storage.ts` - DatabaseStorage class with IStorage interface
 - `server/stripeClient.ts` - Stripe client via Replit Connectors (getUncachableStripeClient, getStripeSync)
+- `server/driveKnowledge.ts` - Google Drive knowledge integration (BMT Decor folder)
 - `server/index.ts` - Express setup with Stripe webhook (BEFORE express.json), Stripe init
 - `client/src/pages/Dashboard.tsx` - Project list dashboard
 - `client/src/pages/ProjectWizard.tsx` - 7-step wizard with split-screen layout
@@ -84,6 +85,19 @@ BMT Decor (CÔNG TY TNHH TMDV BMT DECOR) is an AI-powered Vietnamese architectur
 - Streaming endpoint `GET /api/projects/:id/download-pdf` — generates on-demand
 - PDF fonts: `server/fonts/Roboto-Regular.ttf` and `Roboto-Bold.ttf`
 - PDFKit creates 20+ page professional document with BMT Decor branding
+- Professional architectural drawing style with right-side title block sidebar (155px)
+- Title block includes: CHU DAU TU, THAM DINH THIET KE, DON VI THI CONG (BMT DECOR logo), Director, Drawing info
+- Cover page with split layout: left info + right facade image
+- Logo from `attached_assets/logo_nobg.png`
+- Orange accent color (#e8830c) matching BMT Decor brand
+
+## Google Drive Integration
+- `server/driveKnowledge.ts` - Google Drive connector via Replit Connectors
+- BMT Decor folder ID: `1bX8XfBMq_l3oFT3edht2RLlddHiYLbaK`
+- Text files (.txt, .md, .csv, .json) from Drive folder injected into AI chat context as knowledge
+- 30-minute cache TTL for Drive content
+- `GET /api/drive-files` - List files in BMT Decor Drive folder
+- `POST /api/drive-cache/clear` - Clear Drive knowledge cache
 
 ## External APIs
 - **SerpAPI** (`SERPAPI_KEY`): Google search for design references

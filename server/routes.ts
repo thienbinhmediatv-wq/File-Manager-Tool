@@ -9,6 +9,7 @@ import PDFDocument from "pdfkit";
 import multer from "multer";
 import * as jose from "jose";
 import { sendPdfEmail } from "./emailService";
+import { getDriveKnowledge, listDriveFiles, clearDriveCache } from "./driveKnowledge";
 
 const SERPAPI_KEY = process.env.SERPAPI_KEY || "";
 const ARTIFICIAL_STUDIO_KEY = process.env.ARTIFICIAL_STUDIO_API_KEY || "";
@@ -1167,18 +1168,23 @@ Trả lời chi tiết, có số liệu cụ thể.` }
 
       const fontRegular = path.join(process.cwd(), "server", "fonts", "Roboto-Regular.ttf");
       const fontBold = path.join(process.cwd(), "server", "fonts", "Roboto-Bold.ttf");
+      const logoPath = path.join(process.cwd(), "attached_assets", "logo_nobg.png");
+      const hasLogo = fs.existsSync(logoPath);
 
       const W = 595.28;
       const H = 841.89;
-      const M = 50;
+      const M = 40;
+      const SB_W = 155;
       const CW = W - 2 * M;
       const NAVY = "#1a365d";
       const DARK = "#2d3748";
-      const ACCENT = "#3182ce";
+      const ACCENT = "#e8830c";
+      const BORDER = "#333333";
+      const LIGHT_BG = "#f7fafc";
       const GREEN_BG = "#f0fff4";
       const GREEN_TXT = "#276749";
 
-      const doc = new PDFDocument({ size: "A4", margin: M });
+      const doc = new PDFDocument({ size: "A4", margin: 0 });
       const tempFiles: string[] = [];
 
       if (fs.existsSync(fontRegular)) doc.registerFont("VN", fontRegular);
@@ -1211,102 +1217,222 @@ Trả lời chi tiết, có số liệu cụ thể.` }
         return null;
       };
 
-      const fullPageImg = (imgUrl: string, caption: string) => {
-        const p = resolveImg(imgUrl);
-        if (!p) return;
-        try {
-          doc.addPage();
-          doc.image(p, 0, 0, { width: W, height: H - 70 });
-          doc.save(); doc.opacity(0.85); doc.rect(0, H - 70, W, 70).fill(NAVY); doc.opacity(1); doc.restore();
-          doc.fill("#ffffff").font(fnB).fontSize(13).text(caption, M, H - 55, { width: CW, align: "center" });
-          doc.font(fnR).fontSize(9).text(project.title, M, H - 35, { width: CW, align: "center" });
-        } catch (e) { console.error("PDF img error:", e); }
+      const drawTitleBlock = (drawingTitle: string, itemName: string, scale?: string) => {
+        const sbX = W - SB_W;
+        const sbY = 0;
+        const sbH = H;
+        const cellH = 18;
+        const padL = 4;
+        const labelFs = 6;
+        const valFs = 7.5;
+
+        doc.rect(sbX, sbY, SB_W, sbH).lineWidth(1.5).stroke(BORDER);
+
+        let cy = sbY + 8;
+        doc.font(fnR).fontSize(7).fill("#555").text("CHU DAU TU", sbX + padL, cy, { width: SB_W - 8 });
+        cy += 12;
+        doc.font(fnB).fontSize(8).fill("#000").text(project.clientName || "", sbX + padL, cy, { width: SB_W - 8 });
+        cy += 20;
+
+        doc.moveTo(sbX, cy).lineTo(W, cy).lineWidth(0.5).stroke(BORDER);
+        cy += 5;
+        doc.font(fnB).fontSize(8.5).fill(DARK).text("THAM DINH THIET KE", sbX + padL, cy, { width: SB_W - 8, align: "center" });
+        cy += 22;
+        doc.moveTo(sbX, cy).lineTo(W, cy).lineWidth(0.5).stroke(BORDER);
+
+        cy += 4;
+        const fieldW = (SB_W - 2) / 2;
+
+        doc.font(fnR).fontSize(labelFs).fill("#555").text("T.T (No)", sbX + padL, cy);
+        cy += 10;
+        doc.font(fnR).fontSize(labelFs).fill("#555").text("NGAY LAP / HIEU CHINH", sbX + padL, cy);
+        doc.text("SET-UP DATE / REVISION DATE", sbX + padL, cy + 8);
+        cy += 22;
+        doc.moveTo(sbX, cy).lineTo(W, cy).lineWidth(0.3).stroke("#999");
+
+        cy += 4;
+        doc.font(fnR).fontSize(labelFs).fill("#555").text("MUC DICH PHAT HANH", sbX + padL, cy);
+        doc.text("ISSUED FOR", sbX + padL, cy + 8);
+        cy += 20;
+
+        const checks = [
+          { label: "CO SO T.K", en: "CONCEPT DESIGN", checked: true },
+          { label: "TRINH DUYET", en: "APPROVAL", checked: false },
+          { label: "THI CONG", en: "CONSTRUCTION", checked: false },
+          { label: "HIEU CHINH", en: "REVISION", checked: false },
+        ];
+        for (const chk of checks) {
+          const boxSize = 7;
+          doc.rect(sbX + padL, cy, boxSize, boxSize).lineWidth(0.5).stroke(BORDER);
+          if (chk.checked) {
+            doc.font(fnB).fontSize(7).fill("#000").text("X", sbX + padL + 1.2, cy + 0.5);
+          }
+          doc.font(fnR).fontSize(labelFs).fill("#555").text(chk.label, sbX + padL + boxSize + 3, cy);
+          doc.text(chk.en, sbX + fieldW + padL, cy);
+          cy += 14;
+        }
+        doc.moveTo(sbX, cy).lineTo(W, cy).lineWidth(0.5).stroke(BORDER);
+
+        cy += 6;
+        doc.font(fnB).fontSize(7).fill(DARK).text("DON VI THI CONG", sbX + padL, cy, { width: SB_W - 8, align: "center" });
+        cy += 14;
+
+        if (hasLogo) {
+          try {
+            doc.image(logoPath, sbX + (SB_W - 60) / 2, cy, { width: 60 });
+          } catch {}
+        }
+        cy += 55;
+        doc.font(fnB).fontSize(9).fill(ACCENT).text("BMT DECOR", sbX + padL, cy, { width: SB_W - 8, align: "center" });
+        cy += 16;
+
+        doc.moveTo(sbX, cy).lineTo(W, cy).lineWidth(0.3).stroke("#999");
+
+        const infoFields = [
+          { label: "DIRECTOR", value: "VO QUOC BAO" },
+          { label: "THIET KE - DESIGNED BY", value: "" },
+          { label: "VE - DRAWN BY", value: "" },
+          { label: "CONG TRINH - PROJECT", value: project.title },
+          { label: "DIA DIEM - LOCATION", value: project.clientName ? "" : "" },
+          { label: "HANG MUC - ITEM", value: itemName },
+          { label: "TEN BAN VE - DRAWING TITLE", value: drawingTitle },
+        ];
+
+        for (const field of infoFields) {
+          cy += 3;
+          doc.font(fnR).fontSize(labelFs).fill("#555").text(field.label, sbX + padL, cy, { width: SB_W - 8 });
+          cy += 9;
+          if (field.value) {
+            doc.font(fnB).fontSize(valFs).fill("#000").text(field.value, sbX + padL, cy, { width: SB_W - 8 });
+          }
+          cy += 11;
+          doc.moveTo(sbX, cy).lineTo(W, cy).lineWidth(0.3).stroke("#999");
+        }
+
+        cy += 5;
+        const scaleBoxW = SB_W / 3;
+        doc.font(fnR).fontSize(labelFs).fill("#555").text("TL", sbX + padL, cy);
+        doc.font(fnB).fontSize(valFs).fill("#000").text(scale || "", sbX + scaleBoxW + padL, cy);
+        doc.text("TONG SO MAT", sbX + scaleBoxW * 2 + padL, cy);
+        cy += 10;
+        doc.font(fnR).fontSize(labelFs).fill("#555").text("SCALE", sbX + padL, cy);
+        doc.font(fnR).text(scale || "1/50", sbX + scaleBoxW + padL, cy);
       };
 
-      const imgWithCaption = (imgUrl: string, caption: string) => {
-        const p = resolveImg(imgUrl);
-        if (!p) return;
-        try {
-          doc.addPage();
-          doc.font(fnB).fontSize(12).fill(DARK).text(caption, M, 60, { width: CW, align: "center" });
-          doc.moveDown(0.5);
-          doc.image(p, (W - 480) / 2, doc.y, { fit: [480, 600], align: "center" });
-        } catch (e) { console.error("PDF img error:", e); }
+      const drawPageWithTitleBlock = (imgUrl: string | null, drawingTitle: string, itemName: string, scale?: string) => {
+        doc.addPage({ size: "A4", margin: 0 });
+        const contentW = W - SB_W;
+        const contentH = H;
+
+        if (imgUrl) {
+          const p = resolveImg(imgUrl);
+          if (p) {
+            try {
+              doc.image(p, 0, 0, { width: contentW, height: contentH });
+            } catch (e) { console.error("PDF img error:", e); }
+          }
+        }
+
+        doc.rect(contentW, 0, SB_W, H).fill("#ffffff");
+        drawTitleBlock(drawingTitle, itemName, scale);
       };
 
       const divider = (num: number, title: string, sub?: string) => {
-        doc.addPage();
+        doc.addPage({ size: "A4", margin: 0 });
         doc.rect(0, 0, W, H).fill(NAVY);
-        doc.fill("#ffffff").font(fnB).fontSize(60).text(`0${num}`, M, H / 2 - 100, { width: CW, align: "center" });
-        doc.fontSize(28).text(title, M, H / 2 - 20, { width: CW, align: "center" });
-        if (sub) { doc.moveDown(0.5); doc.font(fnR).fontSize(14).text(sub, { width: CW, align: "center" }); }
+        doc.fill("#ffffff").font(fnB).fontSize(60).text(`0${num}`, M, H / 2 - 100, { width: W - 2 * M, align: "center" });
+        doc.fontSize(28).text(title, M, H / 2 - 20, { width: W - 2 * M, align: "center" });
+        if (sub) { doc.moveDown(0.5); doc.font(fnR).fontSize(14).text(sub, { width: W - 2 * M, align: "center" }); }
         doc.rect(W / 2 - 40, H / 2 + 60, 80, 3).fill(ACCENT);
       };
 
       const sectHead = (title: string) => {
-        doc.addPage();
+        doc.addPage({ size: "A4", margin: 0 });
         doc.rect(0, 0, W, 55).fill(DARK);
-        doc.fill("#ffffff").font(fnB).fontSize(15).text(title, M, 18, { width: CW });
+        doc.fill("#ffffff").font(fnB).fontSize(15).text(title, M, 18, { width: W - 2 * M });
         doc.fill("#000000").font(fnR).fontSize(10).text("", M, 70);
       };
 
-      // COVER
-      doc.rect(0, 0, W, H).fill(NAVY);
-      doc.rect(M - 10, 80, CW + 20, 3).fill(ACCENT);
-      doc.fill("#ffffff").font(fnB).fontSize(42).text("BMT DECOR", M, 110, { width: CW, align: "center" });
-      doc.font(fnR).fontSize(14).text("HỆ THỐNG AI THIẾT KẾ KIẾN TRÚC & NỘI THẤT", { width: CW, align: "center" });
-      doc.moveDown(3);
-      doc.rect(M - 10, doc.y, CW + 20, 3).fill(ACCENT);
-      doc.moveDown(2);
-      doc.font(fnB).fontSize(26).text("PHƯƠNG ÁN THIẾT KẾ", { width: CW, align: "center" });
-      doc.moveDown(0.5);
-      doc.font(fnB).fontSize(22).fill("#90cdf4").text(project.title.toUpperCase(), { width: CW, align: "center" });
-      doc.fill("#ffffff");
-      doc.moveDown(3);
-      doc.font(fnR).fontSize(13);
-      for (const line of [
-        `Khách hàng: ${project.clientName || "N/A"}`,
-        `Kích thước: ${project.landWidth}m × ${project.landLength}m (${area} m²)`,
-        `Quy mô: ${project.floors} tầng — ${project.bedrooms} phòng ngủ`,
-        `Phong cách: ${project.style}`,
-        `Ngân sách: ${project.budget} triệu VNĐ`,
-      ]) {
-        doc.text(line, { width: CW, align: "center" });
-        doc.moveDown(0.4);
-      }
-      doc.moveDown(2);
-      doc.rect(M - 10, doc.y, CW + 20, 1).fill("#4a5568");
-      doc.moveDown(1);
-      doc.fill("#a0aec0").font(fnR).fontSize(10).text(`Ngày lập: ${new Date().toLocaleDateString("vi-VN")}`, { width: CW, align: "center" });
+      // === COVER PAGE ===
+      doc.rect(0, 0, W, H).fill("#ffffff");
+      doc.rect(0, 0, W, 5).fill(ACCENT);
+      doc.rect(0, H - 5, W, 5).fill(ACCENT);
+      doc.rect(0, 0, 5, H).fill(ACCENT);
+      doc.rect(W - 5, 0, 5, H).fill(ACCENT);
 
-      // Cover image
-      const coverUrl = model3d?.facadeImages?.[0] || renderResult?.renders?.[0]?.url;
-      if (coverUrl) {
-        const cp = resolveImg(coverUrl);
+      const coverLeftW = W * 0.5;
+      const coverRightW = W * 0.5;
+
+      if (hasLogo) {
+        try { doc.image(logoPath, 30, 35, { width: 65 }); } catch {}
+      }
+      doc.font(fnB).fontSize(11).fill(DARK).text("CONG TY TNHH TMDV", 100, 40, { width: coverLeftW - 30 });
+      doc.font(fnB).fontSize(16).fill(ACCENT).text("BMT DECOR", 100, 55, { width: coverLeftW - 30 });
+      doc.font(fnR).fontSize(8).fill("#666").text("Dia chi: 7/92, Thanh Thai, P.14, Q.10, TP.HCM", 100, 75, { width: coverLeftW - 30 });
+
+      doc.moveTo(25, 100).lineTo(W - 25, 100).lineWidth(1).stroke(ACCENT);
+
+      doc.font(fnB).fontSize(28).fill(ACCENT).text("PHUONG AN", 40, 160, { width: coverLeftW - 20 });
+      doc.font(fnB).fontSize(28).fill(ACCENT).text("THIET KE", 40, 195, { width: coverLeftW - 20 });
+
+      doc.moveDown(2);
+      const infoY = 280;
+      doc.font(fnB).fontSize(12).fill(DARK).text("KHACH HANG:", 40, infoY, { width: coverLeftW - 20 });
+      doc.font(fnR).fontSize(12).fill("#000").text(project.clientName || "N/A", 140, infoY, { width: coverLeftW - 60 });
+      doc.font(fnB).fontSize(12).fill(DARK).text("DU AN:", 40, infoY + 25, { width: coverLeftW - 20 });
+      doc.font(fnR).fontSize(12).fill("#000").text(project.title, 140, infoY + 25, { width: coverLeftW - 60 });
+      doc.font(fnB).fontSize(12).fill(DARK).text("PHONG CACH:", 40, infoY + 50, { width: coverLeftW - 20 });
+      doc.font(fnR).fontSize(12).fill("#000").text(project.style, 140, infoY + 50, { width: coverLeftW - 60 });
+      doc.font(fnB).fontSize(12).fill(DARK).text("KICH THUOC:", 40, infoY + 75, { width: coverLeftW - 20 });
+      doc.font(fnR).fontSize(12).fill("#000").text(`${project.landWidth}m x ${project.landLength}m (${area} m2)`, 140, infoY + 75, { width: coverLeftW - 60 });
+      doc.font(fnB).fontSize(12).fill(DARK).text("SO TANG:", 40, infoY + 100, { width: coverLeftW - 20 });
+      doc.font(fnR).fontSize(12).fill("#000").text(`${project.floors} tang - ${project.bedrooms} phong ngu`, 140, infoY + 100, { width: coverLeftW - 60 });
+      doc.font(fnB).fontSize(12).fill(DARK).text("NGAN SACH:", 40, infoY + 125, { width: coverLeftW - 20 });
+      doc.font(fnR).fontSize(12).fill("#000").text(`${project.budget} trieu VND`, 140, infoY + 125, { width: coverLeftW - 60 });
+
+      const coverImgUrl = model3d?.facadeImages?.[0] || renderResult?.renders?.[0]?.url;
+      if (coverImgUrl) {
+        const cp = resolveImg(coverImgUrl);
         if (cp) {
           try {
-            doc.addPage();
-            doc.image(cp, 0, 0, { width: W, height: H });
-            doc.save(); doc.opacity(0.9); doc.rect(0, H - 80, W, 80).fill(NAVY); doc.opacity(1); doc.restore();
-            doc.fill("#ffffff").font(fnB).fontSize(16).text("PHỐI CẢNH TỔNG THỂ", M, H - 65, { width: CW, align: "center" });
-            doc.font(fnR).fontSize(11).text(project.title, { width: CW, align: "center" });
+            const imgX = coverLeftW + 10;
+            const imgY = 110;
+            const imgW = coverRightW - 40;
+            const imgH = H - 160;
+            doc.image(cp, imgX, imgY, { fit: [imgW, imgH], align: "center", valign: "center" });
           } catch {}
         }
       }
 
-      // TOC
-      doc.addPage();
+      doc.font(fnR).fontSize(8).fill("#999").text(`Ngay lap: ${new Date().toLocaleDateString("vi-VN")}`, 40, H - 30, { width: W - 80, align: "center" });
+
+      // === COVER IMAGE FULL PAGE ===
+      if (coverImgUrl) {
+        const cp = resolveImg(coverImgUrl);
+        if (cp) {
+          try {
+            doc.addPage({ size: "A4", margin: 0 });
+            doc.image(cp, 0, 0, { width: W, height: H - 70 });
+            doc.save(); doc.opacity(0.85); doc.rect(0, H - 70, W, 70).fill(NAVY); doc.opacity(1); doc.restore();
+            doc.fill("#ffffff").font(fnB).fontSize(13).text("PHOI CANH TONG THE", M, H - 55, { width: W - 2 * M, align: "center" });
+            doc.font(fnR).fontSize(9).text(project.title, M, H - 35, { width: W - 2 * M, align: "center" });
+          } catch {}
+        }
+      }
+
+      // === TOC ===
+      doc.addPage({ size: "A4", margin: 0 });
       doc.rect(0, 0, W, 55).fill(NAVY);
-      doc.fill("#ffffff").font(fnB).fontSize(20).text("MỤC LỤC", M, 16, { width: CW, align: "center" });
+      doc.fill("#ffffff").font(fnB).fontSize(20).text("MUC LUC", M, 16, { width: W - 2 * M, align: "center" });
       doc.fill("#000000").font(fnR).fontSize(12).text("", M, 80);
       for (const item of [
-        { num: "01", title: "PHÂN TÍCH HIỆN TRẠNG", sub: "Đánh giá khu đất, phong thủy" },
-        { num: "02", title: "BỐ TRÍ MẶT BẰNG", sub: "Layout các tầng, phân chia phòng" },
-        { num: "03", title: "BẢN VẼ KỸ THUẬT", sub: "Bản vẽ CAD, kết cấu" },
-        { num: "04", title: "THIẾT KẾ MẶT TIỀN", sub: "Kiến trúc ngoại thất, phối cảnh" },
-        { num: "05", title: "THIẾT KẾ NỘI THẤT", sub: "Nội thất từng phòng, vật liệu" },
-        { num: "06", title: "RENDER PHỐI CẢNH", sub: "Hình ảnh 3D chất lượng cao" },
-        { num: "07", title: "DỰ TOÁN CHI PHÍ", sub: "Chi phí xây dựng, nội thất" },
+        { num: "01", title: "PHAN TICH HIEN TRANG", sub: "Danh gia khu dat, phong thuy" },
+        { num: "02", title: "BO TRI MAT BANG", sub: "Layout cac tang, phan chia phong" },
+        { num: "03", title: "BAN VE KY THUAT", sub: "Ban ve CAD, ket cau" },
+        { num: "04", title: "THIET KE MAT TIEN", sub: "Kien truc ngoai that, phoi canh" },
+        { num: "05", title: "THIET KE NOI THAT", sub: "Noi that tung phong, vat lieu" },
+        { num: "06", title: "RENDER PHOI CANH", sub: "Hinh anh 3D chat luong cao" },
+        { num: "07", title: "DU TOAN CHI PHI", sub: "Chi phi xay dung, noi that" },
       ]) {
         doc.moveDown(0.8);
         doc.font(fnB).fontSize(18).fill(ACCENT).text(item.num, M, doc.y, { continued: true });
@@ -1314,120 +1440,126 @@ Trả lời chi tiết, có số liệu cụ thể.` }
         doc.font(fnR).fontSize(10).fill("#718096").text(`      ${item.sub}`);
         doc.fill("#000000");
         doc.moveDown(0.3);
-        doc.rect(M, doc.y, CW, 0.5).fill("#e2e8f0");
+        doc.rect(M, doc.y, W - 2 * M, 0.5).fill("#e2e8f0");
       }
 
-      // S1: Analysis
-      divider(1, "PHÂN TÍCH HIỆN TRẠNG", "Đánh giá khu đất & yêu cầu thiết kế");
-      sectHead("1. PHÂN TÍCH HIỆN TRẠNG");
-      doc.font(fnB).fontSize(12).fill(DARK).text("THÔNG TIN DỰ ÁN");
+      // === S1: Analysis ===
+      divider(1, "PHAN TICH HIEN TRANG", "Danh gia khu dat & yeu cau thiet ke");
+      sectHead("1. PHAN TICH HIEN TRANG");
+      doc.font(fnB).fontSize(12).fill(DARK).text("THONG TIN DU AN", M, doc.y);
       doc.moveDown(0.5);
       const pd = [
-        ["Tên dự án", project.title], ["Khách hàng", project.clientName || "N/A"],
-        ["Kích thước đất", `${project.landWidth}m × ${project.landLength}m = ${area} m²`],
-        ["Số tầng", `${project.floors} tầng`], ["Phòng ngủ", `${project.bedrooms} phòng`],
-        ["Phong cách", project.style], ["Ngân sách", `${project.budget} triệu VNĐ`],
+        ["Ten du an", project.title], ["Khach hang", project.clientName || "N/A"],
+        ["Kich thuoc dat", `${project.landWidth}m x ${project.landLength}m = ${area} m2`],
+        ["So tang", `${project.floors} tang`], ["Phong ngu", `${project.bedrooms} phong`],
+        ["Phong cach", project.style], ["Ngan sach", `${project.budget} trieu VND`],
       ];
       for (let i = 0; i < pd.length; i++) {
         const y = doc.y;
-        doc.rect(M, y, CW, 22).fill(i % 2 === 0 ? "#f7fafc" : "#ffffff");
+        doc.rect(M, y, W - 2 * M, 22).fill(i % 2 === 0 ? LIGHT_BG : "#ffffff");
         doc.fill("#000000").font(fnB).fontSize(10).text(pd[i][0], M + 10, y + 5, { width: 200 });
-        doc.font(fnR).text(String(pd[i][1]), M + 220, y + 5, { width: CW - 230 });
+        doc.font(fnR).text(String(pd[i][1]), M + 220, y + 5, { width: W - 2 * M - 230 });
       }
       doc.moveDown(1.5);
       if (analysis?.aiAnalysis) {
-        doc.font(fnB).fontSize(12).fill(DARK).text("PHÂN TÍCH AI");
+        doc.font(fnB).fontSize(12).fill(DARK).text("PHAN TICH AI", M, doc.y);
         doc.moveDown(0.5);
-        doc.font(fnR).fontSize(9.5).fill("#000000").text(String(analysis.aiAnalysis).substring(0, 4000));
+        doc.font(fnR).fontSize(9.5).fill("#000000").text(String(analysis.aiAnalysis).substring(0, 4000), M, doc.y, { width: W - 2 * M });
       }
 
-      // S2: Layout
-      divider(2, "BỐ TRÍ MẶT BẰNG", "Layout các tầng & phân chia chức năng");
-      sectHead("2. BỐ TRÍ MẶT BẰNG");
+      // === S2: Layout ===
+      divider(2, "BO TRI MAT BANG", "Layout cac tang & phan chia chuc nang");
+      sectHead("2. BO TRI MAT BANG");
       if (layout?.floors) {
-        for (const fl of layout.floors) {
-          doc.font(fnB).fontSize(13).fill(ACCENT).text(`TẦNG ${fl.floor}`);
+        for (const flr of layout.floors) {
+          doc.font(fnB).fontSize(13).fill(ACCENT).text(`TANG ${flr.floor}`, M, doc.y);
           doc.moveDown(0.3);
-          doc.rect(M, doc.y, CW, 1).fill(ACCENT);
+          doc.rect(M, doc.y, W - 2 * M, 1).fill(ACCENT);
           doc.moveDown(0.4);
           let flArea = 0;
-          for (const room of fl.rooms) {
+          for (const room of flr.rooms) {
             const ra = room.w * room.h; flArea += ra;
             const y = doc.y;
-            doc.rect(M, y, CW, 20).fill("#f7fafc");
+            doc.rect(M, y, W - 2 * M, 20).fill(LIGHT_BG);
             doc.fill("#000000").font(fnR).fontSize(10);
-            doc.text(`• ${room.name}`, M + 10, y + 4, { width: 200 });
-            doc.text(`${room.w}m × ${room.h}m`, M + 220, y + 4, { width: 100 });
-            doc.font(fnB).text(`${ra.toFixed(1)} m²`, M + 340, y + 4, { width: 80 });
+            doc.text(`  ${room.name}`, M + 10, y + 4, { width: 200 });
+            doc.text(`${room.w}m x ${room.h}m`, M + 220, y + 4, { width: 100 });
+            doc.font(fnB).text(`${ra.toFixed(1)} m2`, M + 340, y + 4, { width: 80 });
             doc.y = y + 22;
           }
           doc.moveDown(0.3);
-          doc.font(fnB).fontSize(10).fill(GREEN_TXT).text(`Tổng tầng ${fl.floor}: ${flArea.toFixed(1)} m²`);
+          doc.font(fnB).fontSize(10).fill(GREEN_TXT).text(`Tong tang ${flr.floor}: ${flArea.toFixed(1)} m2`, M, doc.y);
           doc.fill("#000000"); doc.moveDown(1);
-          if (doc.y > H - 150) sectHead("2. BỐ TRÍ MẶT BẰNG (tiếp)");
+          if (doc.y > H - 150) sectHead("2. BO TRI MAT BANG (tiep)");
         }
       }
 
-      // S3: CAD
-      divider(3, "BẢN VẼ KỸ THUẬT", "Bản vẽ CAD & thông số kỹ thuật");
-      sectHead("3. BẢN VẼ KỸ THUẬT");
-      if (cad?.cadDescription) doc.font(fnR).fontSize(9.5).text(cad.cadDescription.substring(0, 4000));
+      // === S3: CAD ===
+      divider(3, "BAN VE KY THUAT", "Ban ve CAD & thong so ky thuat");
+      sectHead("3. BAN VE KY THUAT");
+      if (cad?.cadDescription) doc.font(fnR).fontSize(9.5).text(cad.cadDescription.substring(0, 4000), M, doc.y, { width: W - 2 * M });
       if (cad?.cadDrawings) {
         for (const d of cad.cadDrawings) {
-          if (d.imageUrl) imgWithCaption(d.imageUrl, d.name || "Bản vẽ kỹ thuật");
+          if (d.imageUrl) drawPageWithTitleBlock(d.imageUrl, d.name || "Ban ve ky thuat", "BAN VE CAD", "1/100");
         }
       }
 
-      // S4: Facade
-      divider(4, "THIẾT KẾ MẶT TIỀN", "Kiến trúc ngoại thất & phối cảnh");
-      sectHead("4. THIẾT KẾ MẶT TIỀN");
-      if (model3d?.designDescription) doc.font(fnR).fontSize(9.5).text(model3d.designDescription.substring(0, 4000));
-      const fl = ["Mặt tiền ban ngày", "Mặt tiền ban đêm", "Góc nhìn 45°", "Phối cảnh tổng thể"];
+      // === S4: Facade with title block ===
+      divider(4, "THIET KE MAT TIEN", "Kien truc ngoai that & phoi canh");
+      sectHead("4. THIET KE MAT TIEN");
+      if (model3d?.designDescription) doc.font(fnR).fontSize(9.5).text(model3d.designDescription.substring(0, 4000), M, doc.y, { width: W - 2 * M });
+      const facadeLabels = ["Mat tien ban ngay", "Mat tien ban dem", "Goc nhin 45 do", "Phoi canh tong the"];
       if (model3d?.facadeImages) {
-        for (let i = 0; i < model3d.facadeImages.length; i++) fullPageImg(model3d.facadeImages[i], fl[i] || `Phối cảnh ${i + 1}`);
+        for (let i = 0; i < model3d.facadeImages.length; i++) {
+          drawPageWithTitleBlock(model3d.facadeImages[i], facadeLabels[i] || `Phoi canh ${i + 1}`, "PHOI CANH MAT TIEN", "");
+        }
       }
 
-      // S5: Interior
-      divider(5, "THIẾT KẾ NỘI THẤT", "Nội thất từng phòng & vật liệu");
-      sectHead("5. THIẾT KẾ NỘI THẤT");
-      if (interior?.interiorDescription) doc.font(fnR).fontSize(9.5).text(interior.interiorDescription.substring(0, 4000));
+      // === S5: Interior with title block ===
+      divider(5, "THIET KE NOI THAT", "Noi that tung phong & vat lieu");
+      sectHead("5. THIET KE NOI THAT");
+      if (interior?.interiorDescription) doc.font(fnR).fontSize(9.5).text(interior.interiorDescription.substring(0, 4000), M, doc.y, { width: W - 2 * M });
       if (interior?.interiorImages) {
-        for (const img of interior.interiorImages) fullPageImg(img.url, img.name || "Nội thất");
+        for (const img of interior.interiorImages) {
+          drawPageWithTitleBlock(img.url, img.name || "Noi that", "THIET KE NOI THAT", "");
+        }
       }
 
-      // S6: Renders
-      divider(6, "RENDER PHỐI CẢNH", "Hình ảnh 3D photorealistic chất lượng cao");
+      // === S6: Renders with title block ===
+      divider(6, "RENDER PHOI CANH", "Hinh anh 3D photorealistic chat luong cao");
       if (renderResult?.renders) {
-        for (const r of renderResult.renders) fullPageImg(r.url, r.name);
+        for (const r of renderResult.renders) {
+          drawPageWithTitleBlock(r.url, r.name, "RENDER 3D", "");
+        }
       }
 
-      // S7: Cost
-      divider(7, "DỰ TOÁN CHI PHÍ", "Chi phí xây dựng & nội thất dự kiến");
-      sectHead("7. DỰ TOÁN CHI PHÍ");
-      doc.font(fnB).fontSize(13).fill(DARK).text("BẢNG DỰ TOÁN CHI PHÍ");
+      // === S7: Cost ===
+      divider(7, "DU TOAN CHI PHI", "Chi phi xay dung & noi that du kien");
+      sectHead("7. DU TOAN CHI PHI");
+      doc.font(fnB).fontSize(13).fill(DARK).text("BANG DU TOAN CHI PHI", M, doc.y);
       doc.moveDown(0.5);
       const tTop = doc.y;
       const cw = [30, 220, 100, 145];
-      const th = ["STT", "Hạng mục", "Đơn vị", "Thành tiền (triệu VNĐ)"];
+      const th = ["STT", "Hang muc", "Don vi", "Thanh tien (trieu VND)"];
       let tx = M;
-      doc.rect(M, tTop, CW, 28).fill(NAVY);
+      doc.rect(M, tTop, W - 2 * M, 28).fill(NAVY);
       for (let i = 0; i < th.length; i++) {
         doc.fill("#ffffff").font(fnB).fontSize(9).text(th[i], tx + 5, tTop + 8, { width: cw[i] - 10 });
         tx += cw[i];
       }
       doc.y = tTop + 28;
       const rows = [
-        ["1", "Chi phí xây dựng phần thô", `${totalArea} m²`, `${buildCost.toLocaleString("vi-VN")}`],
-        ["2", "Hoàn thiện ngoại thất", `${totalArea} m²`, `${Math.round(totalArea * 1.5).toLocaleString("vi-VN")}`],
-        ["3", "Thiết kế nội thất", `${totalArea} m²`, `${interiorCost.toLocaleString("vi-VN")}`],
-        ["4", "Hệ thống điện - nước", "1 hệ thống", `${Math.round(totalArea * 0.8).toLocaleString("vi-VN")}`],
-        ["5", "Cảnh quan sân vườn", `${area} m²`, `${Math.round(area * 0.5).toLocaleString("vi-VN")}`],
-        ["6", "Thiết kế kiến trúc", "1 gói", `${Math.round(totalCost * 0.05).toLocaleString("vi-VN")}`],
-        ["7", "Quản lý dự án", "1 gói", `${Math.round(totalCost * 0.03).toLocaleString("vi-VN")}`],
+        ["1", "Chi phi xay dung phan tho", `${totalArea} m2`, `${buildCost.toLocaleString("vi-VN")}`],
+        ["2", "Hoan thien ngoai that", `${totalArea} m2`, `${Math.round(totalArea * 1.5).toLocaleString("vi-VN")}`],
+        ["3", "Thiet ke noi that", `${totalArea} m2`, `${interiorCost.toLocaleString("vi-VN")}`],
+        ["4", "He thong dien - nuoc", "1 he thong", `${Math.round(totalArea * 0.8).toLocaleString("vi-VN")}`],
+        ["5", "Canh quan san vuon", `${area} m2`, `${Math.round(area * 0.5).toLocaleString("vi-VN")}`],
+        ["6", "Thiet ke kien truc", "1 goi", `${Math.round(totalCost * 0.05).toLocaleString("vi-VN")}`],
+        ["7", "Quan ly du an", "1 goi", `${Math.round(totalCost * 0.03).toLocaleString("vi-VN")}`],
       ];
       for (let r = 0; r < rows.length; r++) {
         const ry = doc.y;
-        doc.rect(M, ry, CW, 24).fill(r % 2 === 0 ? "#f7fafc" : "#ffffff");
+        doc.rect(M, ry, W - 2 * M, 24).fill(r % 2 === 0 ? LIGHT_BG : "#ffffff");
         tx = M;
         for (let c = 0; c < rows[r].length; c++) {
           doc.fill("#000000").font(c === 0 ? fnB : fnR).fontSize(9).text(rows[r][c], tx + 5, ry + 6, { width: cw[c] - 10 });
@@ -1437,46 +1569,49 @@ Trả lời chi tiết, có số liệu cụ thể.` }
       }
       const gt = totalCost + Math.round(totalArea * 1.5) + Math.round(totalArea * 0.8) + Math.round(area * 0.5) + Math.round(totalCost * 0.08);
       doc.moveDown(0.5);
-      doc.rect(M, doc.y, CW, 40).fill(GREEN_BG);
+      doc.rect(M, doc.y, W - 2 * M, 40).fill(GREEN_BG);
       const gty = doc.y;
-      doc.fill(GREEN_TXT).font(fnB).fontSize(14).text(`TỔNG DỰ TOÁN: ${gt.toLocaleString("vi-VN")} triệu VNĐ`, M + 15, gty + 12, { width: CW - 30, align: "center" });
+      doc.fill(GREEN_TXT).font(fnB).fontSize(14).text(`TONG DU TOAN: ${gt.toLocaleString("vi-VN")} trieu VND`, M + 15, gty + 12, { width: W - 2 * M - 30, align: "center" });
       doc.y = gty + 50;
       doc.fill("#000000");
       doc.moveDown(1);
       doc.font(fnR).fontSize(9).fill("#718096");
-      doc.text("Lưu ý: Đây là ước tính sơ bộ. Chi phí thực tế có thể thay đổi ±15%.");
+      doc.text("Luu y: Day la uoc tinh so bo. Chi phi thuc te co the thay doi +-15%.", M, doc.y, { width: W - 2 * M });
 
-      // Final page
-      doc.addPage();
+      // === FINAL PAGE ===
+      doc.addPage({ size: "A4", margin: 0 });
       doc.rect(0, 0, W, H).fill(NAVY);
-      doc.fill("#ffffff").font(fnB).fontSize(36).text("BMT DECOR", M, 120, { width: CW, align: "center" });
+      if (hasLogo) {
+        try { doc.image(logoPath, (W - 80) / 2, 80, { width: 80 }); } catch {}
+      }
+      doc.fill("#ffffff").font(fnB).fontSize(36).text("BMT DECOR", M, 175, { width: W - 2 * M, align: "center" });
       doc.moveDown(0.5);
-      doc.font(fnR).fontSize(14).text("Hệ thống AI Thiết kế Kiến trúc & Nội thất", { width: CW, align: "center" });
+      doc.font(fnR).fontSize(14).text("CONG TY TNHH TMDV BMT DECOR", { width: W - 2 * M, align: "center" });
       doc.moveDown(1);
       doc.rect(W / 2 - 40, doc.y, 80, 3).fill(ACCENT);
       doc.moveDown(2);
-      doc.font(fnB).fontSize(16).text("CAM KẾT CHẤT LƯỢNG", { width: CW, align: "center" });
+      doc.font(fnB).fontSize(16).text("CAM KET CHAT LUONG", { width: W - 2 * M, align: "center" });
       doc.moveDown(1);
       doc.font(fnR).fontSize(11);
       for (const c of [
-        "✓  Thiết kế sáng tạo, phù hợp phong cách & ngân sách",
-        "✓  Tư vấn chuyên nghiệp từ đội ngũ kiến trúc sư",
-        "✓  Ứng dụng công nghệ AI tiên tiến",
-        "✓  Hỗ trợ giám sát thi công",
-        "✓  Bảo hành thiết kế trong suốt quá trình xây dựng",
+        "  Thiet ke sang tao, phu hop phong cach & ngan sach",
+        "  Tu van chuyen nghiep tu doi ngu kien truc su",
+        "  Ung dung cong nghe AI tien tien",
+        "  Ho tro giam sat thi cong",
+        "  Bao hanh thiet ke trong suot qua trinh xay dung",
       ]) {
-        doc.text(c, { width: CW, align: "center" }); doc.moveDown(0.5);
+        doc.text(c, { width: W - 2 * M, align: "center" }); doc.moveDown(0.5);
       }
       doc.moveDown(1);
-      doc.font(fnB).fontSize(12).text("LIÊN HỆ", { width: CW, align: "center" });
+      doc.font(fnB).fontSize(12).text("LIEN HE", { width: W - 2 * M, align: "center" });
       doc.moveDown(0.5);
       doc.font(fnR).fontSize(10).fill("#a0aec0");
-      doc.text("Địa chỉ: 7/92, Thành Thái, Phường 14, Quận 10, TP.HCM", { width: CW, align: "center" });
-      doc.text("Director: Võ Quốc Bảo", { width: CW, align: "center" });
-      doc.text("Website: thicongtramsac.vn", { width: CW, align: "center" });
+      doc.text("Dia chi: 7/92, Thanh Thai, Phuong 14, Quan 10, TP.HCM", { width: W - 2 * M, align: "center" });
+      doc.text("Director: Vo Quoc Bao", { width: W - 2 * M, align: "center" });
+      doc.text("Website: thicongtramsac.vn", { width: W - 2 * M, align: "center" });
       doc.moveDown(2);
-      doc.font(fnR).fontSize(9).fill("#718096").text("Cảm ơn quý khách đã tin tưởng sử dụng dịch vụ CÔNG TY TNHH TMDV BMT DECOR", { width: CW, align: "center" });
-      doc.text(`© ${new Date().getFullYear()} BMT DECOR. All rights reserved.`, { width: CW, align: "center" });
+      doc.font(fnR).fontSize(9).fill("#718096").text("Cam on quy khach da tin tuong su dung dich vu CONG TY TNHH TMDV BMT DECOR", { width: W - 2 * M, align: "center" });
+      doc.text(`${new Date().getFullYear()} BMT DECOR. All rights reserved.`, { width: W - 2 * M, align: "center" });
 
       const safeName = project.title.replace(/[^a-zA-Z0-9_ ]/g, "").replace(/\s+/g, "_") || `project_${id}`;
       const encodedName = encodeURIComponent(`BMT_Decor_${project.title}.pdf`);
@@ -1572,6 +1707,10 @@ Trả lời chi tiết, có số liệu cụ thể.` }
           if (snippets.length > 0) {
             knowledgeContext = `\n\nTri thức tham khảo:\n${snippets.join("\n\n")}`;
           }
+        }
+        const driveKnowledge = await getDriveKnowledge();
+        if (driveKnowledge) {
+          knowledgeContext += driveKnowledge;
         }
       } catch (e) {
         console.error("Failed to load AI settings/knowledge:", e);
@@ -1781,6 +1920,21 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
       console.error("Get knowledge files error:", err);
       res.status(500).json({ message: "Failed to get files" });
     }
+  });
+
+  app.get("/api/drive-files", async (_req, res) => {
+    try {
+      const files = await listDriveFiles();
+      res.json(files);
+    } catch (err) {
+      console.error("Drive files error:", err);
+      res.status(500).json({ message: "Failed to list Drive files" });
+    }
+  });
+
+  app.post("/api/drive-cache/clear", (_req, res) => {
+    clearDriveCache();
+    res.json({ success: true });
   });
 
   const knowledgeUpload = multer({
