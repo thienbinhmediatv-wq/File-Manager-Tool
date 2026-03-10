@@ -5,6 +5,7 @@ interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
   timestamp: string;
+  searchResults?: Array<{ title: string; link: string; snippet: string }>;
 }
 
 export function useChat(projectId: number) {
@@ -23,7 +24,12 @@ export function useChat(projectId: number) {
     try {
       const res = await apiRequest("POST", "/api/chat", { projectId, message, step });
       const data = await res.json();
-      const aiMsg: ChatMessage = { role: "assistant", content: data.reply, timestamp: new Date().toISOString() };
+      const aiMsg: ChatMessage = {
+        role: "assistant",
+        content: data.reply,
+        timestamp: new Date().toISOString(),
+        searchResults: data.searchResults,
+      };
       setMessages(prev => [...prev, aiMsg]);
       return data.reply;
     } catch {

@@ -8,6 +8,60 @@ import path from "path";
 import PDFDocument from "pdfkit";
 
 const SERPAPI_KEY = process.env.SERPAPI_KEY || "";
+const ARTIFICIAL_STUDIO_KEY = process.env.ARTIFICIAL_STUDIO_API_KEY || "";
+
+interface ArtificialStudioJob {
+  _id: string;
+  status: string;
+  output?: string;
+  model: string;
+  error?: string;
+}
+
+async function artificialStudioGenerate(
+  model: string,
+  input: Record<string, string>,
+  webhookUrl?: string
+): Promise<ArtificialStudioJob | null> {
+  if (!ARTIFICIAL_STUDIO_KEY) return null;
+  try {
+    const body: Record<string, unknown> = { model, input };
+    if (webhookUrl) body.webhook = webhookUrl;
+    const resp = await fetch("https://api.artificialstudio.ai/api/generate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: ARTIFICIAL_STUDIO_KEY,
+      },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      console.error("Artificial Studio error:", resp.status, await resp.text());
+      return null;
+    }
+    return await resp.json() as ArtificialStudioJob;
+  } catch (err) {
+    console.error("Artificial Studio fetch error:", err);
+    return null;
+  }
+}
+
+async function artificialStudioPoll(jobId: string, maxWait = 120000): Promise<ArtificialStudioJob | null> {
+  if (!ARTIFICIAL_STUDIO_KEY) return null;
+  const start = Date.now();
+  while (Date.now() - start < maxWait) {
+    try {
+      const resp = await fetch(`https://api.artificialstudio.ai/api/generate/${jobId}`, {
+        headers: { Authorization: ARTIFICIAL_STUDIO_KEY },
+      });
+      if (!resp.ok) return null;
+      const data = await resp.json() as ArtificialStudioJob;
+      if (data.status === "success" || data.status === "error") return data;
+    } catch { /* retry */ }
+    await new Promise(r => setTimeout(r, 5000));
+  }
+  return null;
+}
 
 interface SerpResult {
   title: string;
@@ -698,6 +752,57 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
     } catch (err) {
       console.error("Chat error:", err);
       res.status(500).json({ message: "Chat failed" });
+    }
+  });
+
+  app.post("/api/generate-video", async (req, res) => {
+    try {
+      const { projectId, imageUrl, prompt, model } = req.body;
+      if (!imageUrl || !prompt) {
+        return res.status(400).json({ message: "imageUrl and prompt required" });
+      }
+
+      let fullImageUrl = imageUrl;
+      if (imageUrl.startsWith("/generated/")) {
+        const domain = process.env.REPLIT_DOMAINS || process.env.REPLIT_DEV_DOMAIN || "";
+        const host = domain ? `https://${domain}` : `http://localhost:${process.env.PORT || 5000}`;
+        fullImageUrl = `${host}${imageUrl}`;
+      }
+
+      const selectedModel = model || "minimax-image-to-video";
+      const job = await artificialStudioGenerate(selectedModel, {
+        prompt,
+        image_url: fullImageUrl,
+      });
+
+      if (!job) {
+        return res.status(500).json({ message: "Video generation failed to start" });
+      }
+
+      res.json({ jobId: job._id, status: job.status, model: selectedModel });
+    } catch (err) {
+      console.error("Video generation error:", err);
+      res.status(500).json({ message: "Video generation failed" });
+    }
+  });
+
+  app.get("/api/generate-video/:jobId", async (req, res) => {
+    try {
+      const { jobId } = req.params;
+      if (!ARTIFICIAL_STUDIO_KEY) {
+        return res.status(500).json({ message: "Artificial Studio API not configured" });
+      }
+      const resp = await fetch(`https://api.artificialstudio.ai/api/generate/${jobId}`, {
+        headers: { Authorization: ARTIFICIAL_STUDIO_KEY },
+      });
+      if (!resp.ok) {
+        return res.status(resp.status).json({ message: "Failed to check status" });
+      }
+      const data = await resp.json();
+      res.json(data);
+    } catch (err) {
+      console.error("Video status error:", err);
+      res.status(500).json({ message: "Status check failed" });
     }
   });
 

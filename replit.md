@@ -62,6 +62,21 @@ Bmt Decor is an AI-powered Vietnamese architecture & interior design automation 
 - Processing is **async**: endpoint returns immediately, background function does AI work, frontend polls every 3s
 - Generated images saved to `public/generated/` directory, served as static files
 
+## External APIs
+- **SerpAPI** (`SERPAPI_KEY`): Google search for design references, pricing, materials, trends
+  - Auto-triggers when chat detects keywords (giá, vật liệu, xu hướng, phong cách, etc.)
+  - Results shown as clickable references below AI responses
+- **Artificial Studio** (`ARTIFICIAL_STUDIO_API_KEY`): Image-to-video generation
+  - Endpoint: `https://api.artificialstudio.ai/api/generate`
+  - Models: minimax-image-to-video, wan-2.1, kling-1.6-pro, etc.
+  - Used in Step 6 to create flythrough videos from render images
+  - Async via polling (generate → poll status → get output URL)
+
+## API Endpoints
+- `POST /api/generate-video` - Start video generation from render image
+- `GET /api/generate-video/:jobId` - Check video generation status
+- `POST /api/search` - Search Google via SerpAPI
+
 ## Notes
 - User wants to integrate multiple AIs (Claude, etc.) in future
 - Auto-prompts for image generation stages will be provided by user
