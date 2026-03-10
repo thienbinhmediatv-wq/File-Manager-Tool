@@ -228,8 +228,12 @@ async function aiGenerateImage(prompt: string, projectId: number, name: string):
   if (b64) {
     const filename = `${projectId}_${name}_${Date.now()}.png`;
     const filepath = path.join(GEN_DIR, filename);
-    fs.writeFileSync(filepath, Buffer.from(b64, "base64"));
-    return `/generated/${filename}`;
+    try {
+      fs.writeFileSync(filepath, Buffer.from(b64, "base64"));
+    } catch (e) {
+      console.error("Failed to write image file:", e);
+    }
+    return `data:image/png;base64,${b64}`;
   }
   const url = response.data[0]?.url;
   return url || "";
@@ -333,13 +337,18 @@ export async function registerRoutes(
       if (!files || files.length === 0) {
         return res.status(400).json({ message: "No files uploaded" });
       }
-      const uploaded = files.map(f => ({
-        originalName: f.originalname,
-        filename: f.filename,
-        url: `/uploads/${f.filename}`,
-        size: f.size,
-        type: f.mimetype,
-      }));
+      const uploaded = files.map(f => {
+        const buf = fs.readFileSync(f.path);
+        const b64 = buf.toString("base64");
+        const mime = f.mimetype || "image/png";
+        return {
+          originalName: f.originalname,
+          filename: f.filename,
+          url: `data:${mime};base64,${b64}`,
+          size: f.size,
+          type: f.mimetype,
+        };
+      });
       res.json({ files: uploaded });
     } catch (err) {
       console.error("Upload error:", err);
@@ -696,9 +705,25 @@ Trả lời chi tiết, có số liệu cụ thể.` }
           };
 
           let embeddedImageCount = 0;
+          const tmpFiles: string[] = [];
 
-          const resolveImage = (imgUrl: string): string | null => {
+          const resolveImage = (imgUrl: string): string | Buffer | null => {
             if (!imgUrl) return null;
+            if (imgUrl.startsWith("data:image/")) {
+              const match = imgUrl.match(/^data:image\/\w+;base64,(.+)$/);
+              if (match) {
+                const buf = Buffer.from(match[1], "base64");
+                const tmpFile = path.join(GEN_DIR, `tmp_pdf_${Date.now()}_${Math.random().toString(36).slice(2)}.png`);
+                try {
+                  fs.writeFileSync(tmpFile, buf);
+                  tmpFiles.push(tmpFile);
+                  return tmpFile;
+                } catch {
+                  return buf;
+                }
+              }
+              return null;
+            }
             if (imgUrl.startsWith("/generated/")) {
               const safeFile = path.basename(imgUrl.replace("/generated/", ""));
               const imgPath = path.join(GEN_DIR, safeFile);
@@ -714,7 +739,11 @@ Trả lời chi tiết, có số liệu cụ thể.` }
                 const tmpFile = path.join(GEN_DIR, `tmp_pdf_${Date.now()}_${Math.random().toString(36).slice(2)}.png`);
                 const { execSync } = require("child_process");
                 execSync(`curl -sL -o "${tmpFile}" "${imgUrl}"`, { timeout: 15000 });
-                return fs.existsSync(tmpFile) && fs.statSync(tmpFile).size > 100 ? tmpFile : null;
+                if (fs.existsSync(tmpFile) && fs.statSync(tmpFile).size > 100) {
+                  tmpFiles.push(tmpFile);
+                  return tmpFile;
+                }
+                return null;
               } catch { return null; }
             }
             return null;
@@ -1043,11 +1072,19 @@ Trả lời chi tiết, có số liệu cụ thể.` }
           await new Promise<void>((resolve) => writeStream.on("finish", resolve));
 
           pageCount = pdfKitPages;
-          downloadUrl = `/generated/${pdfFilename}`;
-          const fileSizeBytes = fs.statSync(pdfPath).size;
-          estimatedSize = fileSizeBytes > 1024 * 1024
-            ? `${(fileSizeBytes / (1024 * 1024)).toFixed(1)} MB`
-            : `${Math.round(fileSizeBytes / 1024)} KB`;
+          downloadUrl = `/api/projects/${id}/download-pdf`;
+          try {
+            const fileSizeBytes = fs.statSync(pdfPath).size;
+            estimatedSize = fileSizeBytes > 1024 * 1024
+              ? `${(fileSizeBytes / (1024 * 1024)).toFixed(1)} MB`
+              : `${Math.round(fileSizeBytes / 1024)} KB`;
+          } catch {
+            estimatedSize = `~${Math.max(pageCount * 0.5, 1).toFixed(0)} MB`;
+          }
+
+          for (const f of tmpFiles) {
+            try { fs.unlinkSync(f); } catch {}
+          }
         }
 
         result = {
@@ -1112,6 +1149,353 @@ Trả lời chi tiết, có số liệu cụ thể.` }
     const statuses = { ...(project.stepStatuses as Record<string, string> || {}), [step]: "pending" };
     const updated = await storage.updateProject(id, { stepStatuses: statuses });
     res.json(updated);
+  });
+
+  app.get("/api/projects/:id/download-pdf", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid project ID" });
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+
+      const area = project.landWidth * project.landLength;
+      const totalArea = area * project.floors;
+      const buildCost = Math.round(totalArea * 7);
+      const interiorCost = Math.round(totalArea * 3.5);
+      const totalCost = Math.round(totalArea * 10.5);
+
+      const cad = project.cadResult as { cadDescription?: string; cadDrawings?: Array<{imageUrl?: string; name?: string}> } | null;
+      const model3d = project.model3dResult as { facadeImages?: string[]; designDescription?: string } | null;
+      const interior = project.interiorResult as { interiorDescription?: string; interiorImages?: Array<{url: string; name?: string}> } | null;
+      const renderResult = project.renderResult as { renders?: Array<{name: string; url: string}> } | null;
+      const analysis = project.analysisResult as Record<string, string> | null;
+      const layout = project.layoutResult as { floors?: Array<{ floor: number; rooms: Array<{ name: string; w: number; h: number }> }> } | null;
+
+      const fontRegular = path.join(process.cwd(), "server", "fonts", "Roboto-Regular.ttf");
+      const fontBold = path.join(process.cwd(), "server", "fonts", "Roboto-Bold.ttf");
+
+      const W = 595.28;
+      const H = 841.89;
+      const M = 50;
+      const CW = W - 2 * M;
+      const NAVY = "#1a365d";
+      const DARK = "#2d3748";
+      const ACCENT = "#3182ce";
+      const GREEN_BG = "#f0fff4";
+      const GREEN_TXT = "#276749";
+
+      const doc = new PDFDocument({ size: "A4", margin: M });
+      const tempFiles: string[] = [];
+
+      if (fs.existsSync(fontRegular)) doc.registerFont("VN", fontRegular);
+      if (fs.existsSync(fontBold)) doc.registerFont("VN-Bold", fontBold);
+      const fnR = fs.existsSync(fontRegular) ? "VN" : "Helvetica";
+      const fnB = fs.existsSync(fontBold) ? "VN-Bold" : "Helvetica-Bold";
+
+      const resolveImg = (imgUrl: string): string | null => {
+        if (!imgUrl) return null;
+        if (imgUrl.startsWith("data:image/")) {
+          const match = imgUrl.match(/^data:image\/\w+;base64,(.+)$/);
+          if (match) {
+            const tmpFile = path.join(GEN_DIR, `dl_${Date.now()}_${Math.random().toString(36).slice(2)}.png`);
+            try {
+              fs.writeFileSync(tmpFile, Buffer.from(match[1], "base64"));
+              tempFiles.push(tmpFile);
+              return tmpFile;
+            } catch { return null; }
+          }
+          return null;
+        }
+        if (imgUrl.startsWith("/generated/")) {
+          const f = path.join(GEN_DIR, path.basename(imgUrl));
+          return fs.existsSync(f) ? f : null;
+        }
+        if (imgUrl.startsWith("/uploads/")) {
+          const f = path.join(process.cwd(), "public", "uploads", path.basename(imgUrl));
+          return fs.existsSync(f) ? f : null;
+        }
+        return null;
+      };
+
+      const fullPageImg = (imgUrl: string, caption: string) => {
+        const p = resolveImg(imgUrl);
+        if (!p) return;
+        try {
+          doc.addPage();
+          doc.image(p, 0, 0, { width: W, height: H - 70 });
+          doc.save(); doc.opacity(0.85); doc.rect(0, H - 70, W, 70).fill(NAVY); doc.opacity(1); doc.restore();
+          doc.fill("#ffffff").font(fnB).fontSize(13).text(caption, M, H - 55, { width: CW, align: "center" });
+          doc.font(fnR).fontSize(9).text(project.title, M, H - 35, { width: CW, align: "center" });
+        } catch (e) { console.error("PDF img error:", e); }
+      };
+
+      const imgWithCaption = (imgUrl: string, caption: string) => {
+        const p = resolveImg(imgUrl);
+        if (!p) return;
+        try {
+          doc.addPage();
+          doc.font(fnB).fontSize(12).fill(DARK).text(caption, M, 60, { width: CW, align: "center" });
+          doc.moveDown(0.5);
+          doc.image(p, (W - 480) / 2, doc.y, { fit: [480, 600], align: "center" });
+        } catch (e) { console.error("PDF img error:", e); }
+      };
+
+      const divider = (num: number, title: string, sub?: string) => {
+        doc.addPage();
+        doc.rect(0, 0, W, H).fill(NAVY);
+        doc.fill("#ffffff").font(fnB).fontSize(60).text(`0${num}`, M, H / 2 - 100, { width: CW, align: "center" });
+        doc.fontSize(28).text(title, M, H / 2 - 20, { width: CW, align: "center" });
+        if (sub) { doc.moveDown(0.5); doc.font(fnR).fontSize(14).text(sub, { width: CW, align: "center" }); }
+        doc.rect(W / 2 - 40, H / 2 + 60, 80, 3).fill(ACCENT);
+      };
+
+      const sectHead = (title: string) => {
+        doc.addPage();
+        doc.rect(0, 0, W, 55).fill(DARK);
+        doc.fill("#ffffff").font(fnB).fontSize(15).text(title, M, 18, { width: CW });
+        doc.fill("#000000").font(fnR).fontSize(10).text("", M, 70);
+      };
+
+      // COVER
+      doc.rect(0, 0, W, H).fill(NAVY);
+      doc.rect(M - 10, 80, CW + 20, 3).fill(ACCENT);
+      doc.fill("#ffffff").font(fnB).fontSize(42).text("BMT DECOR", M, 110, { width: CW, align: "center" });
+      doc.font(fnR).fontSize(14).text("HỆ THỐNG AI THIẾT KẾ KIẾN TRÚC & NỘI THẤT", { width: CW, align: "center" });
+      doc.moveDown(3);
+      doc.rect(M - 10, doc.y, CW + 20, 3).fill(ACCENT);
+      doc.moveDown(2);
+      doc.font(fnB).fontSize(26).text("PHƯƠNG ÁN THIẾT KẾ", { width: CW, align: "center" });
+      doc.moveDown(0.5);
+      doc.font(fnB).fontSize(22).fill("#90cdf4").text(project.title.toUpperCase(), { width: CW, align: "center" });
+      doc.fill("#ffffff");
+      doc.moveDown(3);
+      doc.font(fnR).fontSize(13);
+      for (const line of [
+        `Khách hàng: ${project.clientName || "N/A"}`,
+        `Kích thước: ${project.landWidth}m × ${project.landLength}m (${area} m²)`,
+        `Quy mô: ${project.floors} tầng — ${project.bedrooms} phòng ngủ`,
+        `Phong cách: ${project.style}`,
+        `Ngân sách: ${project.budget} triệu VNĐ`,
+      ]) {
+        doc.text(line, { width: CW, align: "center" });
+        doc.moveDown(0.4);
+      }
+      doc.moveDown(2);
+      doc.rect(M - 10, doc.y, CW + 20, 1).fill("#4a5568");
+      doc.moveDown(1);
+      doc.fill("#a0aec0").font(fnR).fontSize(10).text(`Ngày lập: ${new Date().toLocaleDateString("vi-VN")}`, { width: CW, align: "center" });
+
+      // Cover image
+      const coverUrl = model3d?.facadeImages?.[0] || renderResult?.renders?.[0]?.url;
+      if (coverUrl) {
+        const cp = resolveImg(coverUrl);
+        if (cp) {
+          try {
+            doc.addPage();
+            doc.image(cp, 0, 0, { width: W, height: H });
+            doc.save(); doc.opacity(0.9); doc.rect(0, H - 80, W, 80).fill(NAVY); doc.opacity(1); doc.restore();
+            doc.fill("#ffffff").font(fnB).fontSize(16).text("PHỐI CẢNH TỔNG THỂ", M, H - 65, { width: CW, align: "center" });
+            doc.font(fnR).fontSize(11).text(project.title, { width: CW, align: "center" });
+          } catch {}
+        }
+      }
+
+      // TOC
+      doc.addPage();
+      doc.rect(0, 0, W, 55).fill(NAVY);
+      doc.fill("#ffffff").font(fnB).fontSize(20).text("MỤC LỤC", M, 16, { width: CW, align: "center" });
+      doc.fill("#000000").font(fnR).fontSize(12).text("", M, 80);
+      for (const item of [
+        { num: "01", title: "PHÂN TÍCH HIỆN TRẠNG", sub: "Đánh giá khu đất, phong thủy" },
+        { num: "02", title: "BỐ TRÍ MẶT BẰNG", sub: "Layout các tầng, phân chia phòng" },
+        { num: "03", title: "BẢN VẼ KỸ THUẬT", sub: "Bản vẽ CAD, kết cấu" },
+        { num: "04", title: "THIẾT KẾ MẶT TIỀN", sub: "Kiến trúc ngoại thất, phối cảnh" },
+        { num: "05", title: "THIẾT KẾ NỘI THẤT", sub: "Nội thất từng phòng, vật liệu" },
+        { num: "06", title: "RENDER PHỐI CẢNH", sub: "Hình ảnh 3D chất lượng cao" },
+        { num: "07", title: "DỰ TOÁN CHI PHÍ", sub: "Chi phí xây dựng, nội thất" },
+      ]) {
+        doc.moveDown(0.8);
+        doc.font(fnB).fontSize(18).fill(ACCENT).text(item.num, M, doc.y, { continued: true });
+        doc.fill(DARK).fontSize(14).text(`   ${item.title}`);
+        doc.font(fnR).fontSize(10).fill("#718096").text(`      ${item.sub}`);
+        doc.fill("#000000");
+        doc.moveDown(0.3);
+        doc.rect(M, doc.y, CW, 0.5).fill("#e2e8f0");
+      }
+
+      // S1: Analysis
+      divider(1, "PHÂN TÍCH HIỆN TRẠNG", "Đánh giá khu đất & yêu cầu thiết kế");
+      sectHead("1. PHÂN TÍCH HIỆN TRẠNG");
+      doc.font(fnB).fontSize(12).fill(DARK).text("THÔNG TIN DỰ ÁN");
+      doc.moveDown(0.5);
+      const pd = [
+        ["Tên dự án", project.title], ["Khách hàng", project.clientName || "N/A"],
+        ["Kích thước đất", `${project.landWidth}m × ${project.landLength}m = ${area} m²`],
+        ["Số tầng", `${project.floors} tầng`], ["Phòng ngủ", `${project.bedrooms} phòng`],
+        ["Phong cách", project.style], ["Ngân sách", `${project.budget} triệu VNĐ`],
+      ];
+      for (let i = 0; i < pd.length; i++) {
+        const y = doc.y;
+        doc.rect(M, y, CW, 22).fill(i % 2 === 0 ? "#f7fafc" : "#ffffff");
+        doc.fill("#000000").font(fnB).fontSize(10).text(pd[i][0], M + 10, y + 5, { width: 200 });
+        doc.font(fnR).text(String(pd[i][1]), M + 220, y + 5, { width: CW - 230 });
+      }
+      doc.moveDown(1.5);
+      if (analysis?.aiAnalysis) {
+        doc.font(fnB).fontSize(12).fill(DARK).text("PHÂN TÍCH AI");
+        doc.moveDown(0.5);
+        doc.font(fnR).fontSize(9.5).fill("#000000").text(String(analysis.aiAnalysis).substring(0, 4000));
+      }
+
+      // S2: Layout
+      divider(2, "BỐ TRÍ MẶT BẰNG", "Layout các tầng & phân chia chức năng");
+      sectHead("2. BỐ TRÍ MẶT BẰNG");
+      if (layout?.floors) {
+        for (const fl of layout.floors) {
+          doc.font(fnB).fontSize(13).fill(ACCENT).text(`TẦNG ${fl.floor}`);
+          doc.moveDown(0.3);
+          doc.rect(M, doc.y, CW, 1).fill(ACCENT);
+          doc.moveDown(0.4);
+          let flArea = 0;
+          for (const room of fl.rooms) {
+            const ra = room.w * room.h; flArea += ra;
+            const y = doc.y;
+            doc.rect(M, y, CW, 20).fill("#f7fafc");
+            doc.fill("#000000").font(fnR).fontSize(10);
+            doc.text(`• ${room.name}`, M + 10, y + 4, { width: 200 });
+            doc.text(`${room.w}m × ${room.h}m`, M + 220, y + 4, { width: 100 });
+            doc.font(fnB).text(`${ra.toFixed(1)} m²`, M + 340, y + 4, { width: 80 });
+            doc.y = y + 22;
+          }
+          doc.moveDown(0.3);
+          doc.font(fnB).fontSize(10).fill(GREEN_TXT).text(`Tổng tầng ${fl.floor}: ${flArea.toFixed(1)} m²`);
+          doc.fill("#000000"); doc.moveDown(1);
+          if (doc.y > H - 150) sectHead("2. BỐ TRÍ MẶT BẰNG (tiếp)");
+        }
+      }
+
+      // S3: CAD
+      divider(3, "BẢN VẼ KỸ THUẬT", "Bản vẽ CAD & thông số kỹ thuật");
+      sectHead("3. BẢN VẼ KỸ THUẬT");
+      if (cad?.cadDescription) doc.font(fnR).fontSize(9.5).text(cad.cadDescription.substring(0, 4000));
+      if (cad?.cadDrawings) {
+        for (const d of cad.cadDrawings) {
+          if (d.imageUrl) imgWithCaption(d.imageUrl, d.name || "Bản vẽ kỹ thuật");
+        }
+      }
+
+      // S4: Facade
+      divider(4, "THIẾT KẾ MẶT TIỀN", "Kiến trúc ngoại thất & phối cảnh");
+      sectHead("4. THIẾT KẾ MẶT TIỀN");
+      if (model3d?.designDescription) doc.font(fnR).fontSize(9.5).text(model3d.designDescription.substring(0, 4000));
+      const fl = ["Mặt tiền ban ngày", "Mặt tiền ban đêm", "Góc nhìn 45°", "Phối cảnh tổng thể"];
+      if (model3d?.facadeImages) {
+        for (let i = 0; i < model3d.facadeImages.length; i++) fullPageImg(model3d.facadeImages[i], fl[i] || `Phối cảnh ${i + 1}`);
+      }
+
+      // S5: Interior
+      divider(5, "THIẾT KẾ NỘI THẤT", "Nội thất từng phòng & vật liệu");
+      sectHead("5. THIẾT KẾ NỘI THẤT");
+      if (interior?.interiorDescription) doc.font(fnR).fontSize(9.5).text(interior.interiorDescription.substring(0, 4000));
+      if (interior?.interiorImages) {
+        for (const img of interior.interiorImages) fullPageImg(img.url, img.name || "Nội thất");
+      }
+
+      // S6: Renders
+      divider(6, "RENDER PHỐI CẢNH", "Hình ảnh 3D photorealistic chất lượng cao");
+      if (renderResult?.renders) {
+        for (const r of renderResult.renders) fullPageImg(r.url, r.name);
+      }
+
+      // S7: Cost
+      divider(7, "DỰ TOÁN CHI PHÍ", "Chi phí xây dựng & nội thất dự kiến");
+      sectHead("7. DỰ TOÁN CHI PHÍ");
+      doc.font(fnB).fontSize(13).fill(DARK).text("BẢNG DỰ TOÁN CHI PHÍ");
+      doc.moveDown(0.5);
+      const tTop = doc.y;
+      const cw = [30, 220, 100, 145];
+      const th = ["STT", "Hạng mục", "Đơn vị", "Thành tiền (triệu VNĐ)"];
+      let tx = M;
+      doc.rect(M, tTop, CW, 28).fill(NAVY);
+      for (let i = 0; i < th.length; i++) {
+        doc.fill("#ffffff").font(fnB).fontSize(9).text(th[i], tx + 5, tTop + 8, { width: cw[i] - 10 });
+        tx += cw[i];
+      }
+      doc.y = tTop + 28;
+      const rows = [
+        ["1", "Chi phí xây dựng phần thô", `${totalArea} m²`, `${buildCost.toLocaleString("vi-VN")}`],
+        ["2", "Hoàn thiện ngoại thất", `${totalArea} m²`, `${Math.round(totalArea * 1.5).toLocaleString("vi-VN")}`],
+        ["3", "Thiết kế nội thất", `${totalArea} m²`, `${interiorCost.toLocaleString("vi-VN")}`],
+        ["4", "Hệ thống điện - nước", "1 hệ thống", `${Math.round(totalArea * 0.8).toLocaleString("vi-VN")}`],
+        ["5", "Cảnh quan sân vườn", `${area} m²`, `${Math.round(area * 0.5).toLocaleString("vi-VN")}`],
+        ["6", "Thiết kế kiến trúc", "1 gói", `${Math.round(totalCost * 0.05).toLocaleString("vi-VN")}`],
+        ["7", "Quản lý dự án", "1 gói", `${Math.round(totalCost * 0.03).toLocaleString("vi-VN")}`],
+      ];
+      for (let r = 0; r < rows.length; r++) {
+        const ry = doc.y;
+        doc.rect(M, ry, CW, 24).fill(r % 2 === 0 ? "#f7fafc" : "#ffffff");
+        tx = M;
+        for (let c = 0; c < rows[r].length; c++) {
+          doc.fill("#000000").font(c === 0 ? fnB : fnR).fontSize(9).text(rows[r][c], tx + 5, ry + 6, { width: cw[c] - 10 });
+          tx += cw[c];
+        }
+        doc.y = ry + 24;
+      }
+      const gt = totalCost + Math.round(totalArea * 1.5) + Math.round(totalArea * 0.8) + Math.round(area * 0.5) + Math.round(totalCost * 0.08);
+      doc.moveDown(0.5);
+      doc.rect(M, doc.y, CW, 40).fill(GREEN_BG);
+      const gty = doc.y;
+      doc.fill(GREEN_TXT).font(fnB).fontSize(14).text(`TỔNG DỰ TOÁN: ${gt.toLocaleString("vi-VN")} triệu VNĐ`, M + 15, gty + 12, { width: CW - 30, align: "center" });
+      doc.y = gty + 50;
+      doc.fill("#000000");
+      doc.moveDown(1);
+      doc.font(fnR).fontSize(9).fill("#718096");
+      doc.text("Lưu ý: Đây là ước tính sơ bộ. Chi phí thực tế có thể thay đổi ±15%.");
+
+      // Final page
+      doc.addPage();
+      doc.rect(0, 0, W, H).fill(NAVY);
+      doc.fill("#ffffff").font(fnB).fontSize(36).text("BMT DECOR", M, 120, { width: CW, align: "center" });
+      doc.moveDown(0.5);
+      doc.font(fnR).fontSize(14).text("Hệ thống AI Thiết kế Kiến trúc & Nội thất", { width: CW, align: "center" });
+      doc.moveDown(1);
+      doc.rect(W / 2 - 40, doc.y, 80, 3).fill(ACCENT);
+      doc.moveDown(2);
+      doc.font(fnB).fontSize(16).text("CAM KẾT CHẤT LƯỢNG", { width: CW, align: "center" });
+      doc.moveDown(1);
+      doc.font(fnR).fontSize(11);
+      for (const c of [
+        "✓  Thiết kế sáng tạo, phù hợp phong cách & ngân sách",
+        "✓  Tư vấn chuyên nghiệp từ đội ngũ kiến trúc sư",
+        "✓  Ứng dụng công nghệ AI tiên tiến",
+        "✓  Hỗ trợ giám sát thi công",
+        "✓  Bảo hành thiết kế trong suốt quá trình xây dựng",
+      ]) {
+        doc.text(c, { width: CW, align: "center" }); doc.moveDown(0.5);
+      }
+      doc.moveDown(2);
+      doc.font(fnR).fontSize(9).fill("#718096").text("Cảm ơn quý khách đã tin tưởng sử dụng dịch vụ BMT Decor", { width: CW, align: "center" });
+      doc.text(`© ${new Date().getFullYear()} BMT DECOR`, { width: CW, align: "center" });
+
+      const safeName = project.title.replace(/[^a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF ]/g, "").replace(/\s+/g, "_");
+      res.setHeader("Content-Type", "application/pdf");
+      if (req.query.download === "1") {
+        res.setHeader("Content-Disposition", `attachment; filename="BMT_Decor_${safeName}.pdf"`);
+      } else {
+        res.setHeader("Content-Disposition", `inline; filename="BMT_Decor_${safeName}.pdf"`);
+      }
+      doc.pipe(res);
+      doc.end();
+
+      res.on("finish", () => {
+        for (const f of tempFiles) {
+          try { fs.unlinkSync(f); } catch {}
+        }
+      });
+    } catch (err) {
+      console.error("PDF download error:", err);
+      res.status(500).json({ message: "PDF generation failed" });
+    }
   });
 
   app.post("/api/chat", async (req, res) => {

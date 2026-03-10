@@ -66,8 +66,11 @@ Bmt Decor is an AI-powered Vietnamese architecture & interior design automation 
 - **Step 6**: gpt-image-1 generates 6 photorealistic renders (facade day/night, living, bedroom, kitchen, garden)
 - **Step 7**: Dual PDF generation — tries PDF Generator API first, falls back to PDFKit. PDFKit creates 20+ page professional document with cover, TOC, section dividers, full-page images, cost table, contact page
 - Processing is **async**: endpoint returns immediately, background function does AI work, frontend polls every 3s
-- Generated images saved to `public/generated/` directory, served as static files
+- **AI images stored as base64 data URLs** in PostgreSQL JSON columns (not filesystem) — production-safe, survives ephemeral filesystem restarts
+- **User uploads converted to base64 data URLs** on upload — also production-safe
+- **PDF download via streaming endpoint** `GET /api/projects/:id/download-pdf` — generates PDF on-demand, streams to browser. Use `?download=1` for attachment download
 - PDF fonts: `server/fonts/Roboto-Regular.ttf` and `Roboto-Bold.ttf` for Vietnamese diacritics support
+- `public/generated/` still used as temp workspace for PDF image extraction, files cleaned up after use
 
 ## External APIs
 - **SerpAPI** (`SERPAPI_KEY`): Google search for design references, pricing, materials, trends

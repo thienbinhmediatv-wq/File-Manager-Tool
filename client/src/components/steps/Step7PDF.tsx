@@ -128,7 +128,7 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, is
                   </div>
                 )}
 
-                <a href={result.downloadUrl} target="_blank" rel="noopener noreferrer" className="block" download>
+                <a href={`${result.downloadUrl}?download=1`} target="_blank" rel="noopener noreferrer" className="block" download>
                   <Button className="w-full rounded-xl h-12 bg-gradient-to-r from-primary to-blue-600 text-white shadow-lg hover:shadow-xl transition-shadow" data-testid="button-download-pdf">
                     <Download className="w-5 h-5 mr-2" /> Tải xuống hồ sơ PDF ({result.pageCount} trang)
                   </Button>
