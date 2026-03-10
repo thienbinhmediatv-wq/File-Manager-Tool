@@ -1101,8 +1101,12 @@ Trả lời chi tiết, có số liệu cụ thể.` }
       console.log(`Step ${step} completed for project ${id}`);
     } catch (err) {
       console.error("Process step error:", err);
-      const errStatuses = { ...(project.stepStatuses as Record<string, string> || {}), [step]: "error" };
-      await storage.updateProject(id, { stepStatuses: errStatuses });
+      try {
+        const errStatuses = { ...(project.stepStatuses as Record<string, string> || {}), [step]: "error" };
+        await storage.updateProject(id, { stepStatuses: errStatuses });
+      } catch (dbErr) {
+        console.error("Failed to save error status for step", step, "project", id, ":", dbErr);
+      }
     }
   }
 
