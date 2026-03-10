@@ -7,9 +7,13 @@ import fs from "fs";
 import path from "path";
 import PDFDocument from "pdfkit";
 import multer from "multer";
+import * as jose from "jose";
 
 const SERPAPI_KEY = process.env.SERPAPI_KEY || "";
 const ARTIFICIAL_STUDIO_KEY = process.env.ARTIFICIAL_STUDIO_API_KEY || "";
+const PDF_API_KEY = process.env.PDF_GENERATOR_API_KEY || "";
+const PDF_API_SECRET = process.env.PDF_GENERATOR_API_SECRET || "";
+const PDF_API_WORKSPACE = process.env.PDF_GENERATOR_WORKSPACE || "";
 
 interface ArtificialStudioJob {
   _id: string;
@@ -165,6 +169,44 @@ const STEP_PROMPTS: Record<number, string> = {
   6: "Tôi sẽ render các góc nhìn cho bạn. Bạn muốn xem góc nào?",
   7: "Hồ sơ PDF sẽ bao gồm tất cả bản vẽ, render và thông tin kỹ thuật.",
 };
+
+async function createPdfApiToken(): Promise<string> {
+  return await new jose.SignJWT({ iss: PDF_API_KEY, sub: PDF_API_WORKSPACE })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setExpirationTime("60s")
+    .sign(new TextEncoder().encode(PDF_API_SECRET));
+}
+
+async function generatePdfViaApi(templateId: number, data: Record<string, unknown>): Promise<{ url: string; name: string } | null> {
+  if (!PDF_API_KEY || !PDF_API_SECRET) return null;
+  try {
+    const token = await createPdfApiToken();
+    const resp = await fetch("https://us1.pdfgeneratorapi.com/api/v4/documents/generate", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        template: { id: templateId, data },
+        format: "pdf",
+        output: "url",
+      }),
+    });
+    if (!resp.ok) {
+      console.error("PDF Generator API error:", resp.status, await resp.text());
+      return null;
+    }
+    const result = await resp.json();
+    return {
+      url: result.response,
+      name: result.meta?.display_name || "document.pdf",
+    };
+  } catch (e) {
+    console.error("PDF Generator API failed:", e);
+    return null;
+  }
+}
 
 async function aiChat(messages: Array<{role: string; content: string}>, maxTokens = 2048): Promise<string> {
   const completion = await openai.chat.completions.create({
