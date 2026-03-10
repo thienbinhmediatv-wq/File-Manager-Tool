@@ -1,26 +1,37 @@
-# Bmt Decor - AI Architecture & Interior Design Tool
+# BMT Decor - AI Architecture & Interior Design Tool
 
 ## Overview
-Bmt Decor is an AI-powered Vietnamese architecture & interior design automation tool. It features a 7-step sequential wizard where each step includes form inputs, integrated AI chat (OpenAI via Replit AI Integrations), result preview, and approve/redo mechanism.
+BMT Decor (CÔNG TY TNHH TMDV BMT DECOR) is an AI-powered Vietnamese architecture & interior design automation tool. It features a 7-step sequential wizard where each step includes form inputs, integrated AI chat (OpenAI via Replit AI Integrations), result preview, and approve/redo mechanism.
+- **Company**: 7/92, Thành Thái, Phường 14, Quận 10, TP.HCM
+- **Director**: Võ Quốc Bảo
+- **Website**: thicongtramsac.vn
 
 ## Architecture
 - **Frontend**: React + Vite + TailwindCSS + shadcn/ui + wouter (routing) + TanStack Query
 - **Backend**: Express.js + Drizzle ORM + PostgreSQL
 - **AI**: OpenAI via Replit AI Integrations (gpt-4.1-mini for chat, gpt-image-1 for images)
+- **Payments**: Stripe via Replit Connectors (stripe-replit-sync for webhook/sync)
 - **Language**: Vietnamese UI labels and prompts throughout
 
 ## Key Files
-- `shared/schema.ts` - Database schema (projects table with 7-step workflow fields)
-- `shared/routes.ts` - API contract definitions
-- `server/routes.ts` - All API endpoints (CRUD, step operations, AI chat)
-- `server/storage.ts` - DatabaseStorage class
-- `server/replit_integrations/` - OpenAI integration (chat, image, audio, batch)
+- `shared/schema.ts` - Database schema (projects, aiSettings, knowledgeFiles tables)
+- `server/routes.ts` - All API endpoints (CRUD, step operations, AI chat, settings, knowledge files, Stripe)
+- `server/storage.ts` - DatabaseStorage class with IStorage interface
+- `server/stripeClient.ts` - Stripe client via Replit Connectors (getUncachableStripeClient, getStripeSync)
+- `server/index.ts` - Express setup with Stripe webhook (BEFORE express.json), Stripe init
 - `client/src/pages/Dashboard.tsx` - Project list dashboard
 - `client/src/pages/ProjectWizard.tsx` - 7-step wizard with split-screen layout
+- `client/src/pages/Settings.tsx` - AI Instructions, Knowledge Files upload, Stripe products
+- `client/src/pages/Guide.tsx` - Usage guide page (7-step process documentation)
 - `client/src/components/steps/Step*.tsx` - Individual step components (1-7)
 - `client/src/components/chat/AIChatPanel.tsx` - AI chat panel
-- `client/src/hooks/use-projects.ts` - Project CRUD + step mutation hooks
-- `client/src/hooks/use-chat.ts` - Chat state management hook
+- `client/src/components/layout/AppLayout.tsx` - Sidebar with logo, nav (Dashboard, Dự án, Hướng dẫn, Cài đặt)
+
+## Database Tables
+- **projects** - Project data with 7-step workflow fields, JSON result columns
+- **ai_settings** - Custom AI instructions (single row, upsert pattern)
+- **knowledge_files** - Uploaded knowledge files (content stored as text in DB)
+- **conversations + messages** - AI chat history
 
 ## 7-Step Workflow
 1. Thu thập dữ liệu (Data Collection)
@@ -31,68 +42,55 @@ Bmt Decor is an AI-powered Vietnamese architecture & interior design automation 
 6. Render phối cảnh (Render)
 7. Xuất PDF hồ sơ (PDF Export)
 
-## Database
-- PostgreSQL with Drizzle ORM
-- Projects table: serial ID, step workflow fields, JSON result columns
-- Conversations + Messages tables for AI chat history
-
 ## API Endpoints
 - `GET/POST /api/projects` - List/Create projects
 - `GET/DELETE /api/projects/:id` - Get/Delete project
 - `POST /api/projects/:id/step/:step/submit` - Submit step form data
 - `POST /api/projects/:id/step/:step/process` - AI process step
-- `POST /api/projects/:id/step/:step/approve` - Approve step (advance)
+- `POST /api/projects/:id/step/:step/approve` - Approve step
 - `POST /api/projects/:id/step/:step/redo` - Redo step
-- `POST /api/chat` - AI chat with project context
+- `POST /api/chat` - AI chat with project context + custom instructions + knowledge files
+- `GET /api/settings/ai` - Get AI settings
+- `PUT /api/settings/ai` - Update AI instructions
+- `GET /api/knowledge-files` - List knowledge files (metadata only)
+- `POST /api/knowledge-files` - Upload knowledge file (multer memory storage)
+- `DELETE /api/knowledge-files/:id` - Delete knowledge file
+- `GET /api/stripe/publishable-key` - Get Stripe publishable key
+- `GET /api/stripe/products` - List Stripe products
+- `POST /api/stripe/checkout` - Create Stripe checkout session
+- `POST /api/stripe/webhook` - Stripe webhook (raw body, registered before express.json)
+- `GET /api/projects/:id/download-pdf` - Streaming PDF download
+
+## AI Integration
+- Custom instructions from `ai_settings` table injected into every AI chat system prompt
+- Knowledge files content injected as reference context in system prompt
+- System prompt includes: base expertise + custom instructions + project context + search results + knowledge files
+
+## Stripe Integration
+- Connected via Replit Connectors (OAuth)
+- `server/stripeClient.ts` - getUncachableStripeClient(), getStripePublishableKey(), getStripeSync()
+- Webhook route registered BEFORE express.json() in index.ts
+- stripe-replit-sync handles schema migration, webhook processing, data backfill
+- Products listed via Stripe API, checkout sessions created for payments
+
+## Image Storage
+- AI images stored as base64 data URLs in PostgreSQL JSON columns (not filesystem)
+- User uploads converted to base64 data URLs on upload
+- Production-safe, survives ephemeral filesystem restarts
+
+## PDF Generation
+- Streaming endpoint `GET /api/projects/:id/download-pdf` — generates on-demand
+- PDF fonts: `server/fonts/Roboto-Regular.ttf` and `Roboto-Bold.ttf`
+- PDFKit creates 20+ page professional document with BMT Decor branding
+
+## External APIs
+- **SerpAPI** (`SERPAPI_KEY`): Google search for design references
+- **Artificial Studio** (`ARTIFICIAL_STUDIO_API_KEY`): Image-to-video generation
+- **PDF Generator API**: Template-based PDF generation (fallback to PDFKit)
 
 ## Environment
 - `DATABASE_URL` - PostgreSQL connection
 - `AI_INTEGRATIONS_OPENAI_BASE_URL` - OpenAI API base URL (via Replit)
 - `AI_INTEGRATIONS_OPENAI_API_KEY` - OpenAI API key (via Replit)
 - `SESSION_SECRET` - Session secret
-
-## File Upload
-- `POST /api/upload` - Multer-based multi-file upload (images, PDF, DWG, video)
-- Files saved to `public/uploads/`, served via express.static
-- Max 20MB per file, supports: PNG, JPG, JPEG, GIF, WebP, PDF, DWG, DXF, MP4, MOV, AVI
-- Step 1 UI supports drag-and-drop + click-to-browse + file removal
-
-## AI Processing (Real)
-- **Step 1**: Data collection (no AI needed)
-- **Step 2**: GPT-4.1-mini analyzes site + generates layout JSON
-- **Step 3**: GPT-4.1-mini describes CAD specs + gpt-image-1 generates floor plan image
-- **Step 4**: gpt-image-1 generates 4 facade images (day/night/45°/aerial) + GPT-4.1-mini describes design
-- **Step 5**: GPT-4.1-mini describes interior design + gpt-image-1 generates 5 room images (living/bedroom/kitchen/bathroom/balcony)
-- **Step 6**: gpt-image-1 generates 6 photorealistic renders (facade day/night, living, bedroom, kitchen, garden)
-- **Step 7**: Dual PDF generation — tries PDF Generator API first, falls back to PDFKit. PDFKit creates 20+ page professional document with cover, TOC, section dividers, full-page images, cost table, contact page
-- Processing is **async**: endpoint returns immediately, background function does AI work, frontend polls every 3s
-- **AI images stored as base64 data URLs** in PostgreSQL JSON columns (not filesystem) — production-safe, survives ephemeral filesystem restarts
-- **User uploads converted to base64 data URLs** on upload — also production-safe
-- **PDF download via streaming endpoint** `GET /api/projects/:id/download-pdf` — generates PDF on-demand, streams to browser. Use `?download=1` for attachment download
-- PDF fonts: `server/fonts/Roboto-Regular.ttf` and `Roboto-Bold.ttf` for Vietnamese diacritics support
-- `public/generated/` still used as temp workspace for PDF image extraction, files cleaned up after use
-
-## External APIs
-- **SerpAPI** (`SERPAPI_KEY`): Google search for design references, pricing, materials, trends
-  - Auto-triggers when chat detects keywords (giá, vật liệu, xu hướng, phong cách, etc.)
-  - Results shown as clickable references below AI responses
-- **Artificial Studio** (`ARTIFICIAL_STUDIO_API_KEY`): Image-to-video generation
-  - Endpoint: `https://api.artificialstudio.ai/api/generate`
-  - Models: minimax-image-to-video, wan-2.1, kling-1.6-pro, etc.
-  - Used in Step 6 to create flythrough videos from render images
-  - Async via polling (generate → poll status → get output URL)
-- **PDF Generator API** (`PDF_GENERATOR_API_KEY`, `PDF_GENERATOR_API_SECRET`, `PDF_GENERATOR_WORKSPACE`):
-  - JWT auth (HS256) via `jose` library
-  - Endpoint: `https://us1.pdfgeneratorapi.com/api/v4/documents/generate`
-  - Used as primary PDF generator in Step 7, PDFKit is fallback
-  - Template-based: sends project data as JSON, gets back PDF URL
-
-## API Endpoints
-- `POST /api/generate-video` - Start video generation from render image
-- `GET /api/generate-video/:jobId` - Check video generation status
-- `POST /api/search` - Search Google via SerpAPI
-
-## Notes
-- User wants to integrate multiple AIs (Claude, etc.) in future
-- Auto-prompts for image generation stages will be provided by user
-- Tool should learn and improve over time through usage
+- Stripe credentials managed via Replit Connectors (auto-injected)

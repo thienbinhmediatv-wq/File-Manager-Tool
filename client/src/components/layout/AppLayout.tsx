@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, FolderKanban, Settings, Bell } from "lucide-react";
+import { LayoutDashboard, FolderKanban, Settings, Bell, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoImg from "@assets/logo_nobg.png";
 
@@ -14,6 +14,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const navItems = [
     { label: "Dashboard", icon: LayoutDashboard, href: "/" },
     { label: "Dự án", icon: FolderKanban, href: "/projects" },
+    { label: "Hướng dẫn", icon: BookOpen, href: "/guide" },
     { label: "Cài đặt", icon: Settings, href: "/settings" },
   ];
 
@@ -69,7 +70,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       <main className="flex-1 md:ml-72 flex flex-col min-h-screen">
         <header className="h-16 glass z-40 sticky top-0 px-8 flex items-center justify-between border-b border-border/50">
           <h2 className="text-lg font-semibold text-foreground capitalize hidden sm:block">
-            {location === "/" ? "Dashboard" : location.startsWith("/projects/") ? "Wizard thiết kế" : "Dự án"}
+            {location === "/" ? "Dashboard" : location.startsWith("/projects/") ? "Wizard thiết kế" : location === "/settings" ? "Cài đặt" : location === "/guide" ? "Hướng dẫn" : "Dự án"}
           </h2>
           <div className="flex items-center gap-4 ml-auto">
             <button className="p-2 rounded-full hover:bg-slate-100 text-muted-foreground transition-colors relative" data-testid="button-notifications">
