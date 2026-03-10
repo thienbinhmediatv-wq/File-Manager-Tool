@@ -537,128 +537,175 @@ Trả lời chi tiết, có số liệu cụ thể.` }
         const pdfFilename = `${id}_hoso_${Date.now()}.pdf`;
         const pdfPath = path.join(GEN_DIR, pdfFilename);
 
+        const fontRegular = path.join(process.cwd(), "server", "fonts", "Roboto-Regular.ttf");
+        const fontBold = path.join(process.cwd(), "server", "fonts", "Roboto-Bold.ttf");
+
         const doc = new PDFDocument({ size: "A4", margin: 50 });
         let pageCount = 1;
         doc.on("pageAdded", () => { pageCount++; });
         const writeStream = fs.createWriteStream(pdfPath);
         doc.pipe(writeStream);
 
-        doc.fontSize(24).text("BMT DECOR", { align: "center" });
-        doc.moveDown(0.5);
-        doc.fontSize(18).text("HO SO THIET KE KIEN TRUC", { align: "center" });
+        if (fs.existsSync(fontRegular)) doc.registerFont("VN", fontRegular);
+        if (fs.existsSync(fontBold)) doc.registerFont("VN-Bold", fontBold);
+        const fnR = fs.existsSync(fontRegular) ? "VN" : "Helvetica";
+        const fnB = fs.existsSync(fontBold) ? "VN-Bold" : "Helvetica-Bold";
+
+        doc.rect(0, 0, doc.page.width, 200).fill("#1a365d");
+        doc.fill("#ffffff").font(fnB).fontSize(32).text("BMT DECOR", 50, 60, { align: "center" });
+        doc.fontSize(14).text("HỆ THỐNG AI THIẾT KẾ KIẾN TRÚC & NỘI THẤT", { align: "center" });
+        doc.moveDown(1);
+        doc.fontSize(10).text("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", { align: "center" });
+
+        doc.fill("#000000").font(fnB).fontSize(20).text("", 50, 230);
+        doc.text("HỒ SƠ THIẾT KẾ KIẾN TRÚC", { align: "center" });
         doc.moveDown(2);
 
-        doc.fontSize(14).text(`Du an: ${project.title}`);
-        doc.text(`Khach hang: ${project.clientName || "N/A"}`);
-        doc.text(`Kich thuoc dat: ${project.landWidth}m x ${project.landLength}m (${area} m2)`);
-        doc.text(`So tang: ${project.floors}`);
-        doc.text(`Phong ngu: ${project.bedrooms}`);
-        doc.text(`Phong cach: ${project.style}`);
-        doc.text(`Ngan sach: ${project.budget} trieu VND`);
-        doc.moveDown(2);
+        doc.font(fnR).fontSize(13);
+        const infoItems = [
+          ["Dự án", project.title],
+          ["Khách hàng", project.clientName || "N/A"],
+          ["Kích thước đất", `${project.landWidth}m × ${project.landLength}m (${area} m²)`],
+          ["Số tầng", `${project.floors} tầng`],
+          ["Phòng ngủ", `${project.bedrooms} phòng`],
+          ["Phong cách", project.style],
+          ["Ngân sách", `${project.budget} triệu VNĐ`],
+        ];
+        for (const [label, value] of infoItems) {
+          doc.font(fnB).text(`${label}: `, { continued: true });
+          doc.font(fnR).text(String(value));
+          doc.moveDown(0.3);
+        }
+        doc.moveDown(1);
+        doc.fontSize(9).fillColor("#666666").text(`Ngày tạo: ${new Date().toLocaleDateString("vi-VN")}`, { align: "right" });
+        doc.fillColor("#000000");
 
-        doc.fontSize(16).text("1. PHAN TICH HIEN TRANG", { underline: true });
-        doc.moveDown(0.5);
+        const sectionTitle = (num: number, title: string) => {
+          doc.addPage();
+          doc.rect(0, 0, doc.page.width, 50).fill("#2d3748");
+          doc.fill("#ffffff").font(fnB).fontSize(16).text(`${num}. ${title}`, 50, 18);
+          doc.fill("#000000").font(fnR).fontSize(11).text("", 50, 70);
+        };
+
+        const addImage = (imgUrl: string) => {
+          if (imgUrl && imgUrl.startsWith("/generated/")) {
+            const safeFile = path.basename(imgUrl.replace("/generated/", ""));
+            const imgPath = path.join(GEN_DIR, safeFile);
+            if (fs.existsSync(imgPath)) {
+              try {
+                doc.moveDown(0.5);
+                doc.image(imgPath, { fit: [500, 400], align: "center" });
+                doc.moveDown(0.5);
+              } catch (e) { console.error("PDF image embed error:", e); }
+            }
+          }
+        };
+
+        sectionTitle(1, "PHÂN TÍCH HIỆN TRẠNG");
         const analysis = project.analysisResult as Record<string, string> | null;
         if (analysis?.aiAnalysis) {
-          doc.fontSize(10).text(String(analysis.aiAnalysis).substring(0, 2000));
+          doc.font(fnR).fontSize(10).text(String(analysis.aiAnalysis).substring(0, 3000));
         } else if (analysis) {
-          doc.fontSize(10).text(JSON.stringify(analysis, null, 2).substring(0, 1000));
+          doc.font(fnR).fontSize(10).text(JSON.stringify(analysis, null, 2).substring(0, 2000));
         }
-        doc.moveDown(1);
 
-        doc.addPage();
-        doc.fontSize(16).text("2. BO TRI LAYOUT", { underline: true });
-        doc.moveDown(0.5);
-        const layout = project.layoutResult;
-        if (layout) {
-          doc.fontSize(10).text(JSON.stringify(layout, null, 2).substring(0, 2000));
+        sectionTitle(2, "BỐ TRÍ LAYOUT");
+        const layout = project.layoutResult as { floors?: Array<{ floor: number; rooms: Array<{ name: string; w: number; h: number }> }> } | null;
+        if (layout?.floors) {
+          for (const fl of layout.floors) {
+            doc.font(fnB).fontSize(12).text(`Tầng ${fl.floor}:`);
+            doc.moveDown(0.3);
+            for (const room of fl.rooms) {
+              doc.font(fnR).fontSize(10).text(`  • ${room.name}: ${room.w}m × ${room.h}m (${(room.w * room.h).toFixed(1)} m²)`);
+            }
+            doc.moveDown(0.5);
+          }
+        } else if (layout) {
+          doc.font(fnR).fontSize(10).text(JSON.stringify(layout, null, 2).substring(0, 2000));
         }
-        doc.moveDown(1);
 
-        doc.addPage();
-        doc.fontSize(16).text("3. BAN VE CAD", { underline: true });
-        doc.moveDown(0.5);
-        const cad = project.cadResult as { cadDescription?: string; cadDrawings?: Array<{imageUrl?: string}> } | null;
+        sectionTitle(3, "BẢN VẼ CAD");
+        const cad = project.cadResult as { cadDescription?: string; cadDrawings?: Array<{imageUrl?: string; name?: string}> } | null;
         if (cad?.cadDescription) {
-          doc.fontSize(10).text(cad.cadDescription.substring(0, 2000));
+          doc.font(fnR).fontSize(10).text(cad.cadDescription.substring(0, 3000));
         }
         if (cad?.cadDrawings) {
           for (const drawing of cad.cadDrawings) {
-            if (drawing.imageUrl && drawing.imageUrl.startsWith("/generated/")) {
-              const imgPath = path.join(GEN_DIR, drawing.imageUrl.replace("/generated/", ""));
-              if (fs.existsSync(imgPath)) {
-                try { doc.addPage().image(imgPath, { fit: [500, 400], align: "center" }); } catch {}
-              }
+            if (drawing.name) {
+              doc.moveDown(0.5);
+              doc.font(fnB).fontSize(11).text(drawing.name);
             }
+            if (drawing.imageUrl) addImage(drawing.imageUrl);
           }
         }
 
-        doc.addPage();
-        doc.fontSize(16).text("4. MO HINH 3D & MAT TIEN", { underline: true });
-        doc.moveDown(0.5);
+        sectionTitle(4, "MÔ HÌNH 3D & MẶT TIỀN");
         const model3d = project.model3dResult as { facadeImages?: string[]; designDescription?: string } | null;
         if (model3d?.designDescription) {
-          doc.fontSize(10).text(model3d.designDescription.substring(0, 2000));
+          doc.font(fnR).fontSize(10).text(model3d.designDescription.substring(0, 3000));
         }
         if (model3d?.facadeImages) {
           for (const imgUrl of model3d.facadeImages) {
-            if (imgUrl.startsWith("/generated/")) {
-              const imgPath = path.join(GEN_DIR, imgUrl.replace("/generated/", ""));
-              if (fs.existsSync(imgPath)) {
-                try { doc.addPage().image(imgPath, { fit: [500, 400], align: "center" }); } catch {}
-              }
-            }
+            addImage(imgUrl);
           }
         }
 
-        doc.addPage();
-        doc.fontSize(16).text("5. THIET KE NOI THAT", { underline: true });
-        doc.moveDown(0.5);
-        const interior = project.interiorResult as { interiorDescription?: string; interiorImages?: Array<{url: string}> } | null;
+        sectionTitle(5, "THIẾT KẾ NỘI THẤT");
+        const interior = project.interiorResult as { interiorDescription?: string; interiorImages?: Array<{url: string; name?: string}> } | null;
         if (interior?.interiorDescription) {
-          doc.fontSize(10).text(interior.interiorDescription.substring(0, 2000));
+          doc.font(fnR).fontSize(10).text(interior.interiorDescription.substring(0, 3000));
         }
         if (interior?.interiorImages) {
           for (const img of interior.interiorImages) {
-            if (img.url.startsWith("/generated/")) {
-              const imgPath = path.join(GEN_DIR, img.url.replace("/generated/", ""));
-              if (fs.existsSync(imgPath)) {
-                try { doc.addPage().image(imgPath, { fit: [500, 400], align: "center" }); } catch {}
-              }
+            if (img.name) {
+              doc.moveDown(0.5);
+              doc.font(fnB).fontSize(11).text(img.name);
             }
+            addImage(img.url);
           }
         }
 
-        doc.addPage();
-        doc.fontSize(16).text("6. RENDER PHOI CANH", { underline: true });
+        sectionTitle(6, "RENDER PHỐI CẢNH");
         const renderResult = project.renderResult as { renders?: Array<{name: string; url: string}> } | null;
         if (renderResult?.renders) {
           for (const r of renderResult.renders) {
-            if (r.url.startsWith("/generated/")) {
-              const imgPath = path.join(GEN_DIR, r.url.replace("/generated/", ""));
-              if (fs.existsSync(imgPath)) {
-                try {
-                  doc.addPage();
-                  doc.fontSize(12).text(r.name);
-                  doc.moveDown(0.5);
-                  doc.image(imgPath, { fit: [500, 400], align: "center" });
-                } catch {}
-              }
-            }
+            doc.font(fnB).fontSize(11).text(r.name);
+            addImage(r.url);
           }
         }
 
-        doc.addPage();
-        doc.fontSize(16).text("7. DU TOAN CHI PHI", { underline: true });
+        sectionTitle(7, "DỰ TOÁN CHI PHÍ");
+        const totalArea = area * project.floors;
+        const buildCost = Math.round(totalArea * 7);
+        const interiorCost = Math.round(totalArea * 3.5);
+        const totalCost = Math.round(totalArea * 10.5);
+
+        doc.font(fnR).fontSize(11);
+        const costItems = [
+          ["Tổng diện tích xây dựng", `${totalArea} m²`],
+          ["Đơn giá xây dựng ước tính", "6 - 10 triệu VNĐ/m²"],
+          ["Chi phí xây dựng thô", `${buildCost.toLocaleString("vi-VN")} triệu VNĐ`],
+          ["Chi phí nội thất", `${interiorCost.toLocaleString("vi-VN")} triệu VNĐ`],
+        ];
+        for (const [label, value] of costItems) {
+          doc.font(fnR).text(`${label}: `, { continued: true });
+          doc.font(fnB).text(String(value));
+          doc.moveDown(0.3);
+        }
         doc.moveDown(0.5);
-        doc.fontSize(12).text(`Tong dien tich xay dung: ${area * project.floors} m2`);
-        doc.text(`Don gia xay dung uoc tinh: 6-10 trieu VND/m2`);
-        doc.text(`Chi phi xay dung tho: ${Math.round(area * project.floors * 7)} trieu VND`);
-        doc.text(`Chi phi noi that: ${Math.round(area * project.floors * 3.5)} trieu VND`);
-        doc.text(`Tong du toan: ${Math.round(area * project.floors * 10.5)} trieu VND`);
+        doc.rect(50, doc.y, 495, 35).fill("#f0fff4");
+        doc.fill("#276749").font(fnB).fontSize(14).text(`TỔNG DỰ TOÁN: ${totalCost.toLocaleString("vi-VN")} triệu VNĐ`, 60, doc.y - 28);
+        doc.fill("#000000");
         doc.moveDown(2);
-        doc.fontSize(10).text("Luu y: Day la uoc tinh so bo. Chi phi thuc te co the thay doi tuy theo vat lieu va nha thau.", { italic: true });
+        doc.font(fnR).fontSize(9).fillColor("#888888").text("Lưu ý: Đây là ước tính sơ bộ. Chi phí thực tế có thể thay đổi tùy theo vật liệu và nhà thầu.", { italic: true });
+        doc.fillColor("#000000");
+
+        doc.addPage();
+        doc.rect(0, doc.page.height - 100, doc.page.width, 100).fill("#1a365d");
+        doc.fill("#ffffff").font(fnB).fontSize(14).text("BMT DECOR", 50, doc.page.height - 80, { align: "center" });
+        doc.font(fnR).fontSize(10).text("Hệ thống AI Thiết kế Kiến trúc & Nội thất", { align: "center" });
+        doc.moveDown(0.5);
+        doc.fontSize(9).text("Cảm ơn quý khách đã tin tưởng sử dụng dịch vụ", { align: "center" });
 
         doc.end();
 

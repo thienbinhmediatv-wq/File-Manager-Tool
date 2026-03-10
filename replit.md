@@ -51,6 +51,12 @@ Bmt Decor is an AI-powered Vietnamese architecture & interior design automation 
 - `AI_INTEGRATIONS_OPENAI_API_KEY` - OpenAI API key (via Replit)
 - `SESSION_SECRET` - Session secret
 
+## File Upload
+- `POST /api/upload` - Multer-based multi-file upload (images, PDF, DWG, video)
+- Files saved to `public/uploads/`, served via express.static
+- Max 20MB per file, supports: PNG, JPG, JPEG, GIF, WebP, PDF, DWG, DXF, MP4, MOV, AVI
+- Step 1 UI supports drag-and-drop + click-to-browse + file removal
+
 ## AI Processing (Real)
 - **Step 1**: Data collection (no AI needed)
 - **Step 2**: GPT-4.1-mini analyzes site + generates layout JSON
@@ -58,9 +64,10 @@ Bmt Decor is an AI-powered Vietnamese architecture & interior design automation 
 - **Step 4**: gpt-image-1 generates facade images (day/night) + GPT-4.1-mini describes design
 - **Step 5**: GPT-4.1-mini describes interior design + gpt-image-1 generates living room & bedroom images
 - **Step 6**: gpt-image-1 generates photorealistic renders (facade, living, bedroom)
-- **Step 7**: PDFKit generates real PDF with all text + embedded AI images
+- **Step 7**: PDFKit generates real PDF with Roboto Vietnamese font, styled headers, embedded AI images, cost estimates
 - Processing is **async**: endpoint returns immediately, background function does AI work, frontend polls every 3s
 - Generated images saved to `public/generated/` directory, served as static files
+- PDF fonts: `server/fonts/Roboto-Regular.ttf` and `Roboto-Bold.ttf` for Vietnamese diacritics support
 
 ## External APIs
 - **SerpAPI** (`SERPAPI_KEY`): Google search for design references, pricing, materials, trends
