@@ -104,37 +104,33 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, is
               </div>
             )}
 
-            {result.downloadUrl && result.downloadUrl !== "#" && (
-              <div className="space-y-3 pt-2">
-                {result.pdfSource !== "pdf_generator_api" && (
-                  <Button
-                    variant="outline"
-                    className="w-full rounded-xl h-10"
-                    onClick={() => setShowPreview(!showPreview)}
-                    data-testid="button-preview-pdf"
-                  >
-                    <BookOpen className="w-4 h-4 mr-2" />
-                    {showPreview ? "Ẩn xem trước" : "Xem trước PDF"}
-                  </Button>
-                )}
+            <div className="space-y-3 pt-2">
+                <Button
+                  variant="outline"
+                  className="w-full rounded-xl h-10"
+                  onClick={() => setShowPreview(!showPreview)}
+                  data-testid="button-preview-pdf"
+                >
+                  <BookOpen className="w-4 h-4 mr-2" />
+                  {showPreview ? "Ẩn xem trước" : "Xem trước PDF"}
+                </Button>
 
-                {showPreview && (
-                  <div className="border rounded-xl overflow-hidden bg-white dark:bg-gray-900" style={{ height: "500px" }}>
-                    <iframe
-                      src={result.downloadUrl}
-                      className="w-full h-full"
-                      title="PDF Preview"
-                    />
-                  </div>
-                )}
+              {showPreview && (
+                <div className="border rounded-xl overflow-hidden bg-white dark:bg-gray-900" style={{ height: "500px" }}>
+                  <iframe
+                    src={`/api/projects/${project.id}/download-pdf`}
+                    className="w-full h-full"
+                    title="PDF Preview"
+                  />
+                </div>
+              )}
 
-                <a href={`${result.downloadUrl}?download=1`} target="_blank" rel="noopener noreferrer" className="block" download>
-                  <Button className="w-full rounded-xl h-12 bg-gradient-to-r from-primary to-blue-600 text-white shadow-lg hover:shadow-xl transition-shadow" data-testid="button-download-pdf">
-                    <Download className="w-5 h-5 mr-2" /> Tải xuống hồ sơ PDF ({result.pageCount} trang)
-                  </Button>
-                </a>
-              </div>
-            )}
+              <a href={`/api/projects/${project.id}/download-pdf?download=1`} target="_blank" rel="noopener noreferrer" className="block" download>
+                <Button className="w-full rounded-xl h-12 bg-gradient-to-r from-primary to-blue-600 text-white shadow-lg hover:shadow-xl transition-shadow" data-testid="button-download-pdf">
+                  <Download className="w-5 h-5 mr-2" /> Tải xuống hồ sơ PDF ({result.pageCount || 45} trang)
+                </Button>
+              </a>
+            </div>
           </div>
         ) : null
       }
