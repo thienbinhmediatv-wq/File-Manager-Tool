@@ -5,14 +5,14 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/Dashboard";
-import ProjectDetails from "@/pages/ProjectDetails";
+import ProjectWizard from "@/pages/ProjectWizard";
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Dashboard}/>
-      <Route path="/projects" component={Dashboard}/>
-      <Route path="/projects/:id" component={ProjectDetails}/>
+      <Route path="/" component={Dashboard} />
+      <Route path="/projects" component={Dashboard} />
+      <Route path="/projects/:id" component={ProjectWizard} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -1,17 +1,10 @@
 import { z } from 'zod';
-import { insertProjectSchema, projects } from './schema';
+import { insertProjectSchema } from './schema';
 
 export const errorSchemas = {
-  validation: z.object({
-    message: z.string(),
-    field: z.string().optional(),
-  }),
-  notFound: z.object({
-    message: z.string(),
-  }),
-  internal: z.object({
-    message: z.string(),
-  }),
+  validation: z.object({ message: z.string(), field: z.string().optional() }),
+  notFound: z.object({ message: z.string() }),
+  internal: z.object({ message: z.string() }),
 };
 
 export const api = {
@@ -19,53 +12,56 @@ export const api = {
     list: {
       method: 'GET' as const,
       path: '/api/projects' as const,
-      responses: {
-        200: z.array(z.custom<typeof projects.$inferSelect>()),
-      },
+      responses: { 200: z.array(z.any()) },
     },
     get: {
       method: 'GET' as const,
       path: '/api/projects/:id' as const,
-      responses: {
-        200: z.custom<typeof projects.$inferSelect>(),
-        404: errorSchemas.notFound,
-      },
+      responses: { 200: z.any(), 404: errorSchemas.notFound },
     },
     create: {
       method: 'POST' as const,
       path: '/api/projects' as const,
       input: insertProjectSchema,
-      responses: {
-        201: z.custom<typeof projects.$inferSelect>(),
-        400: errorSchemas.validation,
-      },
-    },
-    update: {
-      method: 'PUT' as const,
-      path: '/api/projects/:id' as const,
-      input: z.custom<Partial<typeof projects.$inferSelect>>(),
-      responses: {
-        200: z.custom<typeof projects.$inferSelect>(),
-        400: errorSchemas.validation,
-        404: errorSchemas.notFound,
-      },
+      responses: { 201: z.any(), 400: errorSchemas.validation },
     },
     delete: {
       method: 'DELETE' as const,
       path: '/api/projects/:id' as const,
-      responses: {
-        204: z.void(),
-        404: errorSchemas.notFound,
-      },
+      responses: { 204: z.void(), 404: errorSchemas.notFound },
     },
-    startPipeline: {
+    submitStep: {
       method: 'POST' as const,
-      path: '/api/projects/:id/start' as const,
-      responses: {
-        200: z.custom<typeof projects.$inferSelect>(),
-        404: errorSchemas.notFound,
-      }
-    }
+      path: '/api/projects/:id/step/:step/submit' as const,
+      input: z.any(),
+      responses: { 200: z.any(), 404: errorSchemas.notFound },
+    },
+    processStep: {
+      method: 'POST' as const,
+      path: '/api/projects/:id/step/:step/process' as const,
+      responses: { 200: z.any(), 404: errorSchemas.notFound },
+    },
+    approveStep: {
+      method: 'POST' as const,
+      path: '/api/projects/:id/step/:step/approve' as const,
+      responses: { 200: z.any(), 404: errorSchemas.notFound },
+    },
+    redoStep: {
+      method: 'POST' as const,
+      path: '/api/projects/:id/step/:step/redo' as const,
+      responses: { 200: z.any(), 404: errorSchemas.notFound },
+    },
+  },
+  chat: {
+    send: {
+      method: 'POST' as const,
+      path: '/api/chat' as const,
+      input: z.object({
+        projectId: z.number(),
+        message: z.string(),
+      }),
+      responses: { 200: z.object({ reply: z.string() }) },
+    },
   },
 };
 
@@ -82,5 +78,3 @@ export function buildUrl(path: string, params?: Record<string, string | number>)
 }
 
 export type ProjectInput = z.infer<typeof api.projects.create.input>;
-export type ProjectResponse = z.infer<typeof api.projects.create.responses[201]>;
-export type ProjectsListResponse = z.infer<typeof api.projects.list.responses[200]>;

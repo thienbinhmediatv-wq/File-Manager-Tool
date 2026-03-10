@@ -1,39 +1,62 @@
-import { pgTable, text, serial, integer, boolean, timestamp, json, real } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, text, serial, integer, timestamp, json, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+export * from "./models/chat";
 
 export const projects = pgTable("projects", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
+  clientName: text("client_name").notNull().default(""),
   landWidth: real("land_width").notNull(),
   landLength: real("land_length").notNull(),
   floors: integer("floors").notNull().default(1),
   bedrooms: integer("bedrooms").notNull().default(1),
   style: text("style").notNull(),
-  budget: integer("budget").notNull(), // in millions VND
-  status: text("status").notNull().default("pending"), // pending, processing, completed, failed
-  layoutData: json("layout_data"), // To store the generated floorplan JSON
-  conceptImageUrl: text("concept_image_url"),
-  pdfUrl: text("pdf_url"),
+  budget: integer("budget").notNull(),
+  currentStep: integer("current_step").notNull().default(1),
+  stepStatuses: json("step_statuses").$type<Record<string, string>>().default({
+    "1": "pending", "2": "pending", "3": "pending",
+    "4": "pending", "5": "pending", "6": "pending", "7": "pending"
+  }),
+  uploadedFiles: json("uploaded_files").$type<Array<{ name: string; type: string; url: string }>>().default([]),
+  budgetSheetUrl: text("budget_sheet_url"),
+  siteRequirements: json("site_requirements").$type<Record<string, boolean>>().default({}),
+  analysisResult: json("analysis_result"),
+  layoutResult: json("layout_result"),
+  cadResult: json("cad_result"),
+  model3dResult: json("model3d_result"),
+  facadeStyle: text("facade_style"),
+  interiorResult: json("interior_result"),
+  renderResult: json("render_result"),
+  pdfEstimate: json("pdf_estimate"),
+  chatHistory: json("chat_history").$type<Array<{ role: string; content: string; timestamp: string }>>().default([]),
+  status: text("status").notNull().default("active"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertProjectSchema = createInsertSchema(projects).omit({ 
-  id: true, 
+export const insertProjectSchema = createInsertSchema(projects).omit({
+  id: true,
   createdAt: true,
+  currentStep: true,
+  stepStatuses: true,
+  uploadedFiles: true,
+  budgetSheetUrl: true,
+  siteRequirements: true,
+  analysisResult: true,
+  layoutResult: true,
+  cadResult: true,
+  model3dResult: true,
+  facadeStyle: true,
+  interiorResult: true,
+  renderResult: true,
+  pdfEstimate: true,
+  chatHistory: true,
   status: true,
-  layoutData: true,
-  conceptImageUrl: true,
-  pdfUrl: true
 });
 
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
-
-// Request types
 export type CreateProjectRequest = InsertProject;
-export type UpdateProjectRequest = Partial<Project>;
-
-// Response types
 export type ProjectResponse = Project;
-export type ProjectsListResponse = Project[];
