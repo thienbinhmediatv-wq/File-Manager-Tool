@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Upload, FileText, Link as LinkIcon, X, Image, File } from "lucide-react";
+import { Upload, FileText, Link as LinkIcon, X, File } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -195,22 +195,21 @@ export function Step1DataCollection({ project, stepStatus, onProcess, onApprove,
 
         <div>
           <Label className="font-semibold mb-2 block">Upload hình ảnh, sổ đỏ, bản vẽ, video...</Label>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.dwg,.dxf,.mp4,.mov,.avi"
-            className="hidden"
-            onChange={(e) => handleUpload(e.target.files)}
-            data-testid="input-file-upload"
-          />
-          <div
-            className="border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary/50 transition-colors cursor-pointer"
-            onClick={() => fileInputRef.current?.click()}
+          <label
+            className="border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary/50 transition-colors cursor-pointer block"
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
             data-testid="upload-area"
           >
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,.pdf,.dwg,.dxf,video/*"
+              className="sr-only"
+              onChange={(e) => { handleUpload(e.target.files); e.target.value = ""; }}
+              data-testid="input-file-upload"
+            />
             {uploading ? (
               <div className="flex items-center justify-center gap-2">
                 <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
@@ -219,11 +218,11 @@ export function Step1DataCollection({ project, stepStatus, onProcess, onApprove,
             ) : (
               <>
                 <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                <p className="text-sm text-muted-foreground">Kéo thả file hoặc click để chọn</p>
-                <p className="text-xs text-muted-foreground mt-1">PNG, JPG, PDF, DWG, MP4 (tối đa 20MB)</p>
+                <p className="text-sm text-muted-foreground">Nhấn để chọn file hoặc kéo thả vào đây</p>
+                <p className="text-xs text-muted-foreground mt-1">Hình ảnh, PDF, DWG, Video (tối đa 20MB)</p>
               </>
             )}
-          </div>
+          </label>
 
           {uploadedFiles.length > 0 && (
             <div className="mt-3 space-y-2">
@@ -260,20 +259,17 @@ export function Step1DataCollection({ project, stepStatus, onProcess, onApprove,
           <Label className="font-semibold mb-2 block">
             <FileText className="w-4 h-4 inline mr-1" /> File dự toán (PDF)
           </Label>
-          <input
-            ref={pdfInputRef}
-            type="file"
-            accept=".pdf"
-            className="hidden"
-            onChange={(e) => handleUpload(e.target.files)}
-            data-testid="input-pdf-upload"
-          />
-          <div
-            className="border-2 border-dashed border-border rounded-xl p-4 text-center hover:border-primary/50 transition-colors cursor-pointer"
-            onClick={() => pdfInputRef.current?.click()}
-          >
-            <p className="text-sm text-muted-foreground">Click để upload file dự toán PDF</p>
-          </div>
+          <label className="border-2 border-dashed border-border rounded-xl p-4 text-center hover:border-primary/50 transition-colors cursor-pointer block">
+            <input
+              ref={pdfInputRef}
+              type="file"
+              accept=".pdf,application/pdf"
+              className="sr-only"
+              onChange={(e) => { handleUpload(e.target.files); e.target.value = ""; }}
+              data-testid="input-pdf-upload"
+            />
+            <p className="text-sm text-muted-foreground">Nhấn để upload file dự toán PDF</p>
+          </label>
         </div>
 
         <div>
