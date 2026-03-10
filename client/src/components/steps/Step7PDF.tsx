@@ -1,6 +1,6 @@
 import { StepWrapper } from "./StepWrapper";
 import type { Project } from "@shared/schema";
-import { FileText, Download } from "lucide-react";
+import { FileText, Download, Cloud, HardDrive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface Props {
@@ -19,6 +19,7 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, is
     sections?: string[];
     estimatedSize?: string;
     downloadUrl?: string;
+    pdfSource?: string;
   } | null;
 
   return (
@@ -41,13 +42,23 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, is
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-slate-50 rounded-xl p-3">
                 <span className="text-xs text-muted-foreground">Số trang</span>
-                <p className="font-semibold text-lg">{result.pageCount} trang</p>
+                <p className="font-semibold text-lg" data-testid="text-page-count">{result.pageCount} trang</p>
               </div>
               <div className="bg-slate-50 rounded-xl p-3">
                 <span className="text-xs text-muted-foreground">Dung lượng</span>
-                <p className="font-semibold text-lg">{result.estimatedSize}</p>
+                <p className="font-semibold text-lg" data-testid="text-pdf-size">{result.estimatedSize}</p>
               </div>
             </div>
+
+            {result.pdfSource && (
+              <div className="flex items-center gap-2 text-xs bg-blue-50 text-blue-700 rounded-lg px-3 py-2" data-testid="text-pdf-source">
+                {result.pdfSource === "pdf_generator_api" ? (
+                  <><Cloud className="w-3.5 h-3.5" /> Tạo bởi PDF Generator API</>
+                ) : (
+                  <><HardDrive className="w-3.5 h-3.5" /> Tạo bởi PDFKit (local)</>
+                )}
+              </div>
+            )}
 
             {result.sections && (
               <div>
@@ -78,6 +89,9 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, is
         <div className="bg-green-50 border border-green-200 rounded-xl p-4">
           <p className="text-sm text-green-700">
             Hồ sơ PDF sẽ tổng hợp tất cả: phân tích, layout, bản vẽ CAD, mặt tiền, nội thất, render phối cảnh và dự toán chi phí.
+          </p>
+          <p className="text-xs text-green-600 mt-1">
+            Hệ thống sẽ thử tạo PDF qua API trước, nếu lỗi sẽ tự động chuyển sang PDFKit.
           </p>
         </div>
       </div>

@@ -64,7 +64,7 @@ Bmt Decor is an AI-powered Vietnamese architecture & interior design automation 
 - **Step 4**: gpt-image-1 generates facade images (day/night) + GPT-4.1-mini describes design
 - **Step 5**: GPT-4.1-mini describes interior design + gpt-image-1 generates living room & bedroom images
 - **Step 6**: gpt-image-1 generates photorealistic renders (facade, living, bedroom)
-- **Step 7**: PDFKit generates real PDF with Roboto Vietnamese font, styled headers, embedded AI images, cost estimates
+- **Step 7**: Dual PDF generation — tries PDF Generator API first, falls back to PDFKit if API fails. Both produce real downloadable PDF files
 - Processing is **async**: endpoint returns immediately, background function does AI work, frontend polls every 3s
 - Generated images saved to `public/generated/` directory, served as static files
 - PDF fonts: `server/fonts/Roboto-Regular.ttf` and `Roboto-Bold.ttf` for Vietnamese diacritics support
@@ -78,6 +78,11 @@ Bmt Decor is an AI-powered Vietnamese architecture & interior design automation 
   - Models: minimax-image-to-video, wan-2.1, kling-1.6-pro, etc.
   - Used in Step 6 to create flythrough videos from render images
   - Async via polling (generate → poll status → get output URL)
+- **PDF Generator API** (`PDF_GENERATOR_API_KEY`, `PDF_GENERATOR_API_SECRET`, `PDF_GENERATOR_WORKSPACE`):
+  - JWT auth (HS256) via `jose` library
+  - Endpoint: `https://us1.pdfgeneratorapi.com/api/v4/documents/generate`
+  - Used as primary PDF generator in Step 7, PDFKit is fallback
+  - Template-based: sends project data as JSON, gets back PDF URL
 
 ## API Endpoints
 - `POST /api/generate-video` - Start video generation from render image
