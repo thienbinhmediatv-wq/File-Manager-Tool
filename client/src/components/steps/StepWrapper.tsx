@@ -19,7 +19,7 @@ export function StepWrapper({
   title, description, stepStatus, onProcess, onApprove, onRedo,
   isProcessing, isApproving, children, resultContent,
 }: StepWrapperProps) {
-  const showResult = stepStatus === "completed" || stepStatus === "approved";
+  const showResult = stepStatus === "completed" || stepStatus === "approved" || (stepStatus === "processing" && !!resultContent);
   const showForm = stepStatus === "pending" || stepStatus === "submitted" || stepStatus === "error";
 
   return (
@@ -49,7 +49,7 @@ export function StepWrapper({
         </div>
       )}
 
-      {stepStatus === "processing" && (
+      {stepStatus === "processing" && !resultContent && (
         <div className="rounded-2xl border-2 border-dashed border-primary/30 p-8 flex flex-col items-center justify-center bg-primary/5">
           <div className="relative">
             <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />

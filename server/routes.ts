@@ -1111,7 +1111,14 @@ Trả lời chi tiết, có số liệu cụ thể.` }
     const project = await storage.getProject(id);
     if (!project) return res.status(404).json({ message: "Project not found" });
     const currentStatus = ((project.stepStatuses as Record<string, string>) || {})[String(step)];
-    if (currentStatus !== "completed") {
+
+    const stepResultField: Record<number, string> = {
+      1: "siteRequirements", 2: "analysisResult", 3: "cadResult",
+      4: "model3dResult", 5: "interiorResult", 6: "renderResult", 7: "pdfEstimate",
+    };
+    const hasResult = !!(project as any)[stepResultField[step]];
+
+    if (currentStatus !== "completed" && !(currentStatus === "processing" && hasResult)) {
       return res.status(400).json({ message: "Bước này chưa được xử lý xong" });
     }
 
