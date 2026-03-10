@@ -226,13 +226,6 @@ async function aiGenerateImage(prompt: string, projectId: number, name: string):
   });
   const b64 = response.data[0]?.b64_json;
   if (b64) {
-    const filename = `${projectId}_${name}_${Date.now()}.png`;
-    const filepath = path.join(GEN_DIR, filename);
-    try {
-      fs.writeFileSync(filepath, Buffer.from(b64, "base64"));
-    } catch (e) {
-      console.error("Failed to write image file:", e);
-    }
     return `data:image/png;base64,${b64}`;
   }
   const url = response.data[0]?.url;
@@ -341,6 +334,7 @@ export async function registerRoutes(
         const buf = fs.readFileSync(f.path);
         const b64 = buf.toString("base64");
         const mime = f.mimetype || "image/png";
+        try { fs.unlinkSync(f.path); } catch {}
         return {
           originalName: f.originalname,
           filename: f.filename,
@@ -735,16 +729,8 @@ Trả lời chi tiết, có số liệu cụ thể.` }
               return fs.existsSync(imgPath) ? imgPath : null;
             }
             if (imgUrl.startsWith("http://") || imgUrl.startsWith("https://")) {
-              try {
-                const tmpFile = path.join(GEN_DIR, `tmp_pdf_${Date.now()}_${Math.random().toString(36).slice(2)}.png`);
-                const { execSync } = require("child_process");
-                execSync(`curl -sL -o "${tmpFile}" "${imgUrl}"`, { timeout: 15000 });
-                if (fs.existsSync(tmpFile) && fs.statSync(tmpFile).size > 100) {
-                  tmpFiles.push(tmpFile);
-                  return tmpFile;
-                }
-                return null;
-              } catch { return null; }
+              console.warn("PDF: Skipping remote URL (not supported in production):", imgUrl.substring(0, 80));
+              return null;
             }
             return null;
           };
@@ -1477,12 +1463,13 @@ Trả lời chi tiết, có số liệu cụ thể.` }
       doc.font(fnR).fontSize(9).fill("#718096").text("Cảm ơn quý khách đã tin tưởng sử dụng dịch vụ BMT Decor", { width: CW, align: "center" });
       doc.text(`© ${new Date().getFullYear()} BMT DECOR`, { width: CW, align: "center" });
 
-      const safeName = project.title.replace(/[^a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF ]/g, "").replace(/\s+/g, "_");
+      const safeName = project.title.replace(/[^a-zA-Z0-9_ ]/g, "").replace(/\s+/g, "_") || `project_${id}`;
+      const encodedName = encodeURIComponent(`BMT_Decor_${project.title}.pdf`);
       res.setHeader("Content-Type", "application/pdf");
       if (req.query.download === "1") {
-        res.setHeader("Content-Disposition", `attachment; filename="BMT_Decor_${safeName}.pdf"`);
+        res.setHeader("Content-Disposition", `attachment; filename="BMT_Decor_${safeName}.pdf"; filename*=UTF-8''${encodedName}`);
       } else {
-        res.setHeader("Content-Disposition", `inline; filename="BMT_Decor_${safeName}.pdf"`);
+        res.setHeader("Content-Disposition", `inline; filename="BMT_Decor_${safeName}.pdf"; filename*=UTF-8''${encodedName}`);
       }
       doc.pipe(res);
       doc.end();
