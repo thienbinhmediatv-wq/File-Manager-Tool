@@ -7,6 +7,60 @@ import fs from "fs";
 import path from "path";
 import PDFDocument from "pdfkit";
 
+const SERPAPI_KEY = process.env.SERPAPI_KEY || "";
+
+interface SerpResult {
+  title: string;
+  link: string;
+  snippet: string;
+  thumbnail?: string;
+}
+
+async function serpSearch(query: string, opts?: { num?: number; searchType?: string }): Promise<SerpResult[]> {
+  if (!SERPAPI_KEY) return [];
+  try {
+    const params = new URLSearchParams({
+      api_key: SERPAPI_KEY,
+      q: query,
+      engine: "google",
+      num: String(opts?.num || 5),
+      hl: "vi",
+      gl: "vn",
+    });
+    if (opts?.searchType === "images") {
+      params.set("tbm", "isch");
+    }
+    const resp = await fetch(`https://serpapi.com/search.json?${params}`);
+    if (!resp.ok) {
+      console.error("SerpAPI error:", resp.status, await resp.text());
+      return [];
+    }
+    const data = await resp.json();
+    if (opts?.searchType === "images" && data.images_results) {
+      return data.images_results.slice(0, opts.num || 5).map((r: any) => ({
+        title: r.title || "",
+        link: r.link || r.original || "",
+        snippet: r.source || "",
+        thumbnail: r.thumbnail || r.original || "",
+      }));
+    }
+    return (data.organic_results || []).slice(0, opts?.num || 5).map((r: any) => ({
+      title: r.title || "",
+      link: r.link || "",
+      snippet: r.snippet || "",
+      thumbnail: r.thumbnail || "",
+    }));
+  } catch (err) {
+    console.error("SerpAPI fetch error:", err);
+    return [];
+  }
+}
+
+function formatSearchResults(results: SerpResult[]): string {
+  if (results.length === 0) return "";
+  return results.map((r, i) => `[${i + 1}] ${r.title}\n   ${r.snippet}\n   Link: ${r.link}`).join("\n\n");
+}
+
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -60,6 +114,34 @@ async function aiGenerateImage(prompt: string, projectId: number, name: string):
   }
   const url = response.data[0]?.url;
   return url || "";
+}
+
+const SEARCH_KEYWORDS = [
+  "giá", "bao nhiêu", "chi phí", "xu hướng", "trend", "mới nhất", "phổ biến",
+  "vật liệu", "gạch", "sơn", "gỗ", "đá", "kính", "inox", "nhôm",
+  "tham khảo", "ví dụ", "mẫu", "kiểu", "style", "phong cách",
+  "nhà thầu", "đơn vị", "công ty", "thương hiệu",
+  "tiêu chuẩn", "quy chuẩn", "TCVN", "luật xây dựng",
+  "so sánh", "đánh giá", "review", "tốt nhất",
+  "Buôn Ma Thuột", "BMT", "Đắk Lắk", "Tây Nguyên",
+  "phong thủy", "hướng nhà", "tuổi",
+  "tìm", "search", "tra cứu", "lookup",
+];
+
+function detectSearchIntent(message: string): boolean {
+  const lower = message.toLowerCase();
+  return SEARCH_KEYWORDS.some(kw => lower.includes(kw.toLowerCase()));
+}
+
+function buildSearchQuery(message: string, project: any): string {
+  let query = message;
+  if (query.length < 15 && project) {
+    query = `${message} nhà ${project.style} ${project.floors} tầng Việt Nam`;
+  }
+  if (!query.toLowerCase().includes("việt nam") && !query.toLowerCase().includes("vn")) {
+    query += " Việt Nam";
+  }
+  return query;
 }
 
 function buildProjectContext(project: Record<string, unknown>): string {
@@ -556,12 +638,24 @@ Trả lời chi tiết, có số liệu cụ thể.` }
 
   app.post("/api/chat", async (req, res) => {
     try {
-      const { projectId, message, step } = req.body;
+      const { projectId, message, step, enableSearch } = req.body;
       if (!message) return res.status(400).json({ message: "Message required" });
 
       let project = null;
       if (projectId) {
         project = await storage.getProject(projectId);
+      }
+
+      let searchContext = "";
+      let searchResults: SerpResult[] = [];
+      const shouldSearch = enableSearch !== false && SERPAPI_KEY && detectSearchIntent(message);
+
+      if (shouldSearch) {
+        const searchQuery = buildSearchQuery(message, project);
+        searchResults = await serpSearch(searchQuery, { num: 5 });
+        if (searchResults.length > 0) {
+          searchContext = `\n\nKết quả tìm kiếm tham khảo từ internet:\n${formatSearchResults(searchResults)}`;
+        }
       }
 
       const systemPrompt = `Bạn là trợ lý AI thiết kế kiến trúc & nội thất của Bmt Decor. Bạn là chuyên gia về:
@@ -572,8 +666,10 @@ Trả lời chi tiết, có số liệu cụ thể.` }
 
 ${project ? `${buildProjectContext(project as unknown as Record<string, unknown>)}
 - Bước hiện tại: ${step || project.currentStep}/7 - ${STEP_NAMES[step || project.currentStep]}` : ""}
+${searchContext}
 
-Trả lời ngắn gọn, chuyên nghiệp, bằng tiếng Việt. Đưa ra gợi ý cụ thể và thực tế.`;
+Trả lời ngắn gọn, chuyên nghiệp, bằng tiếng Việt. Đưa ra gợi ý cụ thể và thực tế.
+${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham khảo và trích dẫn nguồn khi phù hợp." : ""}`;
 
       const chatHistory = (project?.chatHistory as Array<{role: string; content: string}>) || [];
       const recentHistory = chatHistory.slice(-10).map(m => ({
@@ -595,10 +691,25 @@ Trả lời ngắn gọn, chuyên nghiệp, bằng tiếng Việt. Đưa ra gợ
         await storage.updateProject(project.id, { chatHistory: newHistory });
       }
 
-      res.json({ reply });
+      res.json({
+        reply,
+        searchResults: searchResults.length > 0 ? searchResults : undefined,
+      });
     } catch (err) {
       console.error("Chat error:", err);
       res.status(500).json({ message: "Chat failed" });
+    }
+  });
+
+  app.post("/api/search", async (req, res) => {
+    try {
+      const { query, type } = req.body;
+      if (!query) return res.status(400).json({ message: "Query required" });
+      const results = await serpSearch(query, { num: 8, searchType: type || "web" });
+      res.json({ results, query });
+    } catch (err) {
+      console.error("Search error:", err);
+      res.status(500).json({ message: "Search failed" });
     }
   });
 
