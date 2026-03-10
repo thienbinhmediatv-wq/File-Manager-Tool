@@ -48,3 +48,4 @@ integrations = ["javascript_openai_ai_integrations:2.0.0", "stripe:1.0.0"]
 PDF_GENERATOR_API_KEY = "94c9acaf7d4c579dce904e2e037e70b1e464bdf9aefa70cb0e995cac62b37957"
 PDF_GENERATOR_API_SECRET = "0535a332d61209ed8748de0f9af23680adea57c5574b45eb56e96733be8ed1cc"
 PDF_GENERATOR_WORKSPACE = "tcmedia.copyright@gmail.com"
+GMAIL_SENDER = "Bmt.decor@gmail.com"
