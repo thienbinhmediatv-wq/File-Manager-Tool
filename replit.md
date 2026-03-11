@@ -6,6 +6,26 @@ BMT Decor (CÔNG TY TNHH TMDV BMT DECOR) is an AI-powered Vietnamese architectur
 - **Director**: Võ Quốc Bảo
 - **Website**: thicongtramsac.vn
 
+## Cẩm Nang Knowledge System (5 files in DB)
+Each step (3-7) has a corresponding Cẩm nang (handbook) stored in `knowledge_files` table:
+- **Bước 3**: 2D CAD — Layer chuẩn (A-WALL, A-COLM, A-DIM, A-BOUND), Dimension 3 lớp, khoảng lùi 1.2-1.4m, cầu thang Sinh 16-18cm, Title Block A/E chuẩn
+- **Bước 4**: 3D Model — Khớp 2D-3D, vật liệu theo dự toán, ánh sáng theo hướng nhà
+- **Bước 5**: Nội thất — Tam giác vàng bếp, 3-layer lighting, phong thủy, ergonomics 600-900mm
+- **Bước 6**: Render — Physical lighting, camera eye-level 1.6m, vật liệu thật, life-like elements
+- **Bước 7**: PDF — Cấu trúc 35-70 trang chuẩn BMT, QA/QC cross-check, đặt tên file chuẩn
+
+## Step 3 CAD Standard (Updated)
+- Generates one CAD floor plan image per floor (not just one)
+- Right-side vertical title block: CHỦ ĐẦU TƯ → DIRECTOR Võ Quốc Bảo → Scale 1/100 → Drawing No KT-01
+- 3-layer dimension system in image prompt
+- Grid references (circled numbers bottom, letters left)
+- Technical specs: setback, stairSteps, layers, scale displayed in UI
+
+## Step 7 PDF Standard (Updated)
+- File naming: BMT{id}_{ClientName}_{Date}.pdf
+- QA/QC cross-check report embedded in PDF data
+- 7 sections: Bìa → Danh mục → Pháp lý → 2D CAD → Nội thất → Phối cảnh → Dự toán
+
 ## Architecture
 - **Frontend**: React + Vite + TailwindCSS + shadcn/ui + wouter (routing) + TanStack Query
 - **Backend**: Express.js + Drizzle ORM + PostgreSQL

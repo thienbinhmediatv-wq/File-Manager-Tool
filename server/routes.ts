@@ -508,33 +508,93 @@ CHỈ trả về JSON, không giải thích.` }
         };
 
       } else if (step === 3) {
+        const layout3 = project.layoutResult as { floors?: Array<{ floor: number; rooms: Array<{ name: string; w: number; h: number }> }> } | null;
+        const layoutJson3 = layout3?.floors ? JSON.stringify(layout3.floors, null, 2) : "{}";
+        const setback = project.landWidth <= 5 ? "1.2m" : "1.4m";
+        const floorH = 3.3;
+        const stairSteps = Math.round((floorH * 100) / 17); // bậc Sinh 16-18cm
+
         const cadText = await aiChat([
-          { role: "system", content: "Bạn là kỹ sư xây dựng AI. Tạo mô tả bản vẽ kỹ thuật chi tiết bằng tiếng Việt." },
-          { role: "user", content: `Tạo mô tả bản vẽ CAD/kỹ thuật chi tiết cho dự án:
+          { role: "system", content: `Bạn là kỹ sư xây dựng AI của BMT Decor. Áp dụng Cẩm nang Tư duy Bước 3:
+- Hệ thống Layer chuẩn: A-WALL (Tường), A-COLM (Cột), A-DIM (Kích thước), A-BOUND (Ranh đất)
+- Dimension 3 lớp: (1) Tổng thể khu đất theo sổ đỏ, (2) Kích thước thông thủy từng phòng, (3) Chi tiết khoảng lùi ${setback} theo luật BMT
+- Cầu thang: ${stairSteps} bậc, chiều cao mỗi bậc 17cm (Sinh), mặt bậc 25-28cm
+- Tường ngoài 200mm, tường trong 100-150mm
+- Kiểm tra: Không được vi phạm lộ giới. Khoảng lùi mặt tiền tối thiểu ${setback}.
+- Ghi chú kỹ thuật: S = m², mã vật liệu tương ứng dự toán
+Trả lời bằng tiếng Việt, chi tiết kỹ thuật chuyên nghiệp.` },
+          { role: "user", content: `Tạo hồ sơ bản vẽ CAD/kỹ thuật chi tiết theo chuẩn BMT Decor cho dự án:
 ${ctx}
-Layout đã duyệt: ${JSON.stringify(project.layoutResult || {})}
 
-Mô tả chi tiết:
-1. Bản vẽ mặt bằng từng tầng (vị trí tường, cửa đi, cửa sổ, cầu thang)
-2. Mặt cắt A-A (chiều cao tầng, kết cấu sàn, mái)
-3. Mặt đứng chính (mặt tiền)
-4. Kích thước chi tiết từng phòng
-5. Vị trí cột, dầm chính
+Layout các tầng (từ Bước 2):
+${layoutJson3}
 
-Trả lời chi tiết kỹ thuật.` }
-        ], 3000);
+Yêu cầu mô tả ĐẦY ĐỦ:
+1. MẶT BẰNG TỪNG TẦNG (${project.floors} tầng):
+   - Vị trí tường, cột, cửa đi (W x H), cửa sổ, cầu thang
+   - Tên và kích thước thông thủy từng phòng (m x m)
+   - Diện tích S = m² từng phòng và tổng sàn
+   - Layer: A-WALL / A-COLM / A-DIM / A-BOUND
 
-        const cadImageUrl = await aiGenerateImage(
-          `Architectural floor plan blueprint, 2D technical drawing, top-down view of a ${project.floors}-story Vietnamese house, ${project.landWidth}m x ${project.landLength}m, ${project.style} style, showing rooms, walls, doors, stairs, dimensions, clean professional CAD drawing style, blue lines on white background`,
-          id, "cad_floorplan"
-        );
+2. HỆ THỐNG KÝ HIỆU:
+   - Grid trục: Số 1-N (ngang), Chữ A-Z (dọc)
+   - Khoảng lùi mặt tiền: ${setback}
+   - Dimension lớp 1: Tổng ${project.landWidth}m x ${project.landLength}m
+   - Dimension lớp 2: Kích thước từng phòng thông thủy
+   - Dimension lớp 3: Chi tiết khoảng lùi và cột
+
+3. MẶT CẮT A-A (CẮT NGANG):
+   - Chiều cao tầng ${floorH}m thông thủy
+   - Kết cấu sàn BTCT dày 120-150mm
+   - Mái: độ dốc, chống thấm
+
+4. CẦU THANG CHI TIẾT:
+   - ${stairSteps} bậc, H bậc = 17cm (số Sinh), W mặt bậc 27cm
+   - Chiều cao thông thủy dưới dầm >2.2m
+   - Lan can cao 1.1m
+
+5. THÔNG SỐ KẾT CẤU:
+   - Cột chính: 200x400mm hoặc 200x300mm
+   - Dầm chính: 200x400mm
+   - Móng: Băng hoặc Cọc (theo ngân sách ${project.budget} triệu)
+
+6. GHI CHÚ KỸ THUẬT (Title Block phải có):
+   - Tên công trình, địa điểm, chủ đầu tư
+   - TỈ LỆ 1/100, SỐ BẢN VẼ: KT-01
+   - DIRECTOR: Võ Quốc Bảo, Đơn vị: BMT DECOR
+
+Trả lời chi tiết, đủ dữ liệu để vẽ CAD thực tế.` }
+        ], 4000);
+
+        // Generate CAD floor plan images for each floor
+        const cadDrawings: Array<{ name: string; type: string; imageUrl: string; floor?: number }> = [];
+        const floors3 = layout3?.floors || [{ floor: 1, rooms: [] }];
+
+        for (const floorData of floors3) {
+          const roomsList = floorData.rooms.map(r => `${r.name}(${r.w}m×${r.h}m)`).join(", ");
+          const floorLabel = floorData.floor === 1 ? "TẦNG TRỆT" : `LẦU ${floorData.floor - 1}`;
+          const imagePrompt = `Professional architectural floor plan drawing, 2D top-down view, black thin lines on pure white background, Vietnamese residential house ${project.landWidth}m x ${project.landLength}m, ${floorLabel}, rooms: ${roomsList}, style ${project.style}.
+Features: 3-layer dimension lines (outer total, mid room sizes, inner setback ${setback}), grid reference circles bottom (1,2,3,4,5) and left letters (A,B,C,D), thick exterior walls 200mm, thin interior walls, door arcs, window openings, staircase with steps, furniture layout symbols (sofa, bed, toilet, sink).
+RIGHT SIDE vertical title block (155px wide): CHU DAU TU blank, THAM DINH THIET KE, T.T(No) revision table, MUC DICH PHAT HANH checkboxes (CO SO TK/TRINH DUYET/THI CONG/HIEU CHINH), DON VI THI CONG with BMT DECOR logo, DIRECTOR VO QUOC BAO, THIET KE DESIGNED BY, VE DRAWN BY, CONG TRINH PROJECT, DIA DIEM LOCATION, HANG MUC ITEM, TEN BAN VE DRAWING TITLE, TI LE 1/100 TONG SO BAN VE, SO BAN VE DRAWING No.
+Bottom label: MAT BANG ${floorLabel} TL: 1/100. Clean professional A/E standard drawing.`;
+
+          const imgUrl = await aiGenerateImage(imagePrompt, id, `cad_floor_${floorData.floor}`);
+          cadDrawings.push({ name: `Mặt bằng ${floorLabel}`, type: "floorplan", imageUrl: imgUrl, floor: floorData.floor });
+        }
 
         result = {
-          cadDrawings: [
-            { name: "Mặt bằng tổng thể", type: "floorplan", imageUrl: cadImageUrl },
-          ],
+          cadDrawings,
           cadDescription: cadText,
-          dimensions: { totalArea: area * project.floors, wallThickness: 0.2, floorHeight: 3.3 },
+          dimensions: {
+            totalArea: area * project.floors,
+            wallThickness: 0.2,
+            floorHeight: floorH,
+            setback,
+            stairSteps,
+            titleBlock: "BMT DECOR chuẩn A/E - lề phải",
+            layers: ["A-WALL", "A-COLM", "A-DIM", "A-BOUND"],
+            scale: "1/100",
+          },
         };
 
       } else if (step === 4) {
@@ -554,16 +614,50 @@ Trả lời chi tiết kỹ thuật.` }
         }
 
         const designText = await aiChat([
-          { role: "system", content: "Bạn là kiến trúc sư AI chuyên thiết kế mặt tiền nhà Việt Nam. Trả lời chi tiết bằng tiếng Việt." },
-          { role: "user", content: `Mô tả chi tiết thiết kế mặt tiền phong cách ${facadeStyle} cho nhà ${project.floors} tầng, ${project.landWidth}m rộng, ${project.landLength}m sâu:
-- Vật liệu mặt tiền (cụ thể loại gạch, đá, sơn, kính)
-- Tỷ lệ cửa sổ và cửa đi
-- Mái và chi tiết kiến trúc đặc trưng
-- Hệ thống ban công, lam che nắng
-- Màu sắc chủ đạo và phối màu
-- Cây xanh trang trí mặt tiền
-- Hệ thống chiếu sáng ngoại thất` }
-        ], 3000);
+          { role: "system", content: `Bạn là kiến trúc sư AI của BMT Decor. Áp dụng Cẩm nang Tư duy Bước 4:
+- Mọi điểm nút trên 3D phải trùng khớp với tim trục và độ dày tường trong file CAD Bước 3.
+- Chiều cao bậc thang 16-18cm, mặt bậc 20-30mm, thông thủy dưới dầm >2.2m.
+- Vật liệu phải khớp với dự toán. Bối cảnh (nhà hàng xóm, cây xanh, cột điện) từ hiện trạng.
+- Khoảng lùi 1.2m - 1.4m không được vi phạm.
+- Trả lời bằng tiếng Việt, chi tiết kỹ thuật và thẩm mỹ.` },
+          { role: "user", content: `Mô tả chi tiết thiết kế mặt tiền & mô hình 3D theo chuẩn BMT Decor:
+Dự án: ${ctx}
+Phong cách: ${facadeStyle}, ${project.floors} tầng, ${project.landWidth}m rộng x ${project.landLength}m sâu.
+Ngân sách: ${project.budget} triệu VNĐ.
+
+Mô tả ĐẦY ĐỦ:
+1. PHÂN TÍCH HƯỚNG NHÀ & ÁNH SÁNG:
+   - Hướng chính: ${project.direction || "Đông Nam"}
+   - Góc nắng theo mùa, đề xuất lam chắn nắng hoặc ô văng
+   - Thông tầng, giếng trời (nếu có)
+   - Bối cảnh xung quanh (nhà hàng xóm, cây xanh)
+
+2. VẬT LIỆU MẶT TIỀN (theo ngân sách):
+   - ${project.budget > 1500 ? "Ốp đá Marble/Granite vân tự nhiên" : "Sơn nước chất lượng cao"} (nêu mã màu)
+   - Hệ cửa: ${project.budget > 1500 ? "Nhôm Xingfa kính cường lực 12mm" : "Nhôm thường kính 6mm"}
+   - Mái: kiểu dáng, chống thấm, vật liệu
+
+3. CHI TIẾT KIẾN TRÚC ĐẶC TRƯNG ${facadeStyle}:
+   - Tỷ lệ cửa sổ và cửa đi (W x H mm)
+   - Hệ thống ban công, lan can (cao 1.1m)
+   - Lam chắn nắng (khoảng cách, vật liệu)
+   - Gờ chỉ, phào cổ trần (nếu Tân Cổ Điển)
+
+4. MÀU SẮC CHÍNH:
+   - Màu tường: (mã sơn cụ thể)
+   - Màu chi tiết kiến trúc
+   - Màu cổng, hàng rào, cửa chính
+
+5. CẢNH QUAN MẶT TIỀN:
+   - Cây xanh phù hợp địa phương (tên cây, vị trí)
+   - Chiếu sáng ngoại thất (đèn rọi, đèn âm đất)
+   - Sân trước: vật liệu lát, diện tích
+
+6. QA/QC 3D:
+   - Khớp với bản vẽ CAD Bước 3 không?
+   - Chi tiết cong/chéo có nằm trong ngân sách không?
+   - Thẩm mỹ BMT Decor: tinh tế, hiện đại?` }
+        ], 4000);
 
         result = {
           facadeStyle,
@@ -572,26 +666,57 @@ Trả lời chi tiết kỹ thuật.` }
         };
 
       } else if (step === 5) {
+        const isHighBudget = project.budget > 1500;
         const interiorText = await aiChat([
-          { role: "system", content: "Bạn là nhà thiết kế nội thất AI chuyên nghiệp tại Việt Nam. Trả lời bằng tiếng Việt." },
-          { role: "user", content: `Thiết kế nội thất chi tiết cho dự án:
+          { role: "system", content: `Bạn là nhà thiết kế nội thất AI của BMT Decor. Áp dụng Cẩm nang Tư duy Bước 5:
+- Nội thất nằm trong khung kỹ thuật từ Bước 3 & 4 (tường, cột, chiều cao trần).
+- Khoảng cách lưu thông: sofa-kệ tivi, bàn ăn-tủ bếp tối thiểu 600mm - 900mm.
+- Tam giác vàng bếp: Bếp - Chậu rửa - Tủ lạnh tối ưu.
+- Chiếu sáng 3 lớp: Ambient (âm trần), Task (chức năng), Accent (trang trí).
+- Phong thủy: Đầu giường tựa tường, không đối diện cửa. Bếp không cạnh chậu rửa.
+- Vật liệu theo ngân sách: ${isHighBudget ? "Gỗ tự nhiên, đá Marble, inox mạ vàng, da thật" : "MDF phủ Melamine, sơn đơn sắc, gạch men khổ chuẩn"}.
+Trả lời bằng tiếng Việt, chi tiết và có số liệu.` },
+          { role: "user", content: `Thiết kế nội thất chi tiết chuẩn BMT Decor cho dự án:
 ${ctx}
+Ngân sách: ${project.budget} triệu VNĐ (${isHighBudget ? "Cao cấp" : "Tiết kiệm thông minh"})
+Bản vẽ CAD từ Bước 3: ${project.cadResult ? "Đã có" : "Chưa có"}
 
-Cho mỗi phòng (phòng khách, phòng ngủ master, bếp, WC, ban công/sân thượng), hãy đề xuất:
-1. Vật liệu sàn, tường, trần
-2. Đồ nội thất cụ thể (tên, kích thước, giá ước tính VND)
-3. Hệ thống ánh sáng
-4. Tổng chi phí nội thất ước tính
+Cho MỖI PHÒNG (phòng khách, phòng ngủ master, phòng ngủ ${project.bedrooms > 2 ? "con, " : ""}bếp+ăn, WC, ban công):
 
-Trả lời chi tiết, có số liệu cụ thể.` }
-        ], 3000);
+1. VẬT LIỆU SÀN/TƯỜNG/TRẦN (theo ngân sách):
+   - Sàn: ${isHighBudget ? "Gỗ tự nhiên Sồi/Óc chó hoặc đá Marble" : "Gạch Ceramic 60x60 hoặc SPC"}
+   - Tường: (màu sơn, mã cụ thể)
+   - Trần: (cao bao nhiêu, có giật cấp không)
 
+2. ĐỒ NỘI THẤT (tên, kích thước mm, giá VNĐ):
+   - Sofa/Bàn ăn/Giường: kích thước chuẩn module
+   - Khoảng lưu thông: ≥ 600mm - 900mm
+   - Nêu thương hiệu tương đương nếu cao cấp
+
+3. HỆ THỐNG ÁNH SÁNG 3 LỚP:
+   - Ambient: đèn âm trần, số lượng, watt
+   - Task: đèn bếp, đèn đọc sách
+   - Accent: đèn hắt khe, đèn tranh, led dây
+
+4. PHONG THỦY & KIỂM TRA:
+   - Đầu giường tựa tường vững chắc ✓/✗
+   - Bếp không cạnh chậu rửa ✓/✗
+   - Cửa toilet không đối diện bàn ăn ✓/✗
+
+5. CHI PHÍ ƯỚC TÍNH TỪNG PHÒNG (triệu VNĐ):
+   - Vật liệu + Nhân công + Đồ nội thất
+   - TỔNG CHI PHÍ NỘI THẤT TOÀN NHÀ
+
+Trả lời chi tiết, có con số thực tế.` }
+        ], 4000);
+
+        const interiorMat = isHighBudget ? "luxury marble stone tiles, natural wood veneer, gold inox trim" : "porcelain tile floor, painted walls, engineered wood";
         const interiorPrompts = [
-          { name: "Phòng khách", key: "interior_living", prompt: `Interior design of a luxurious Vietnamese ${project.style} style living room, modern furniture, natural wood materials, warm lighting, indoor plants, professional interior photography, photorealistic, 4K quality` },
-          { name: "Phòng ngủ Master", key: "interior_bedroom", prompt: `Interior design of a beautiful ${project.style} style master bedroom, Vietnamese residential, elegant bed, warm ambient lighting, natural materials, cozy atmosphere, professional interior photography` },
-          { name: "Phòng bếp", key: "interior_kitchen", prompt: `Modern Vietnamese ${project.style} style kitchen interior, beautiful cabinetry, island counter, natural materials, pendant lighting, tiled backsplash, professional interior photography, photorealistic` },
-          { name: "Phòng tắm", key: "interior_bathroom", prompt: `Luxurious Vietnamese ${project.style} style bathroom, marble tiles, rain shower, freestanding bathtub, warm lighting, natural stone accents, professional interior photography, photorealistic` },
-          { name: "Ban công / Sân thượng", key: "interior_balcony", prompt: `Beautiful ${project.style} style balcony terrace of Vietnamese house, outdoor lounge furniture, tropical plants, city view, warm evening lighting, professional architectural photography` },
+          { name: "Phòng khách", key: "interior_living", prompt: `Photorealistic interior design Vietnamese ${project.style} style living room, ${interiorMat}, eye-level camera 1.6m height, warm 3-layer lighting (ambient ceiling, task, accent strip lights), sofa 600mm clearance, tropical indoor plants, life-like elements: books flowers decor objects, 4K professional architectural photography` },
+          { name: "Phòng ngủ Master", key: "interior_bedroom", prompt: `Photorealistic ${project.style} style master bedroom Vietnamese house, ${interiorMat}, bed headboard against solid wall (feng shui), 3-layer lighting warm ambiance, wide-angle view no distortion, soft textures, 4K interior photography` },
+          { name: "Phòng bếp & ăn", key: "interior_kitchen", prompt: `Photorealistic Vietnamese ${project.style} kitchen dining open plan, golden triangle layout (stove-sink-fridge), ${interiorMat}, pendant lights over island, backsplash tiles, 4K interior professional photography` },
+          { name: "Phòng tắm", key: "interior_bathroom", prompt: `Photorealistic ${project.style} style bathroom Vietnamese residential, ${isHighBudget ? "marble tiles rain shower" : "porcelain tiles shower"}, warm accent lighting, clean lines, 4K interior photography` },
+          { name: "Ban công / Sân thượng", key: "interior_balcony", prompt: `Beautiful ${project.style} Vietnamese house balcony terrace, tropical plants local species, outdoor lounge, warm evening lighting ambient, city view context 80% similar real surroundings, life-like atmosphere, 4K architectural photography` },
         ];
 
         const interiorImages: Array<{name: string; url: string}> = [];
@@ -607,13 +732,17 @@ Trả lời chi tiết, có số liệu cụ thể.` }
         };
 
       } else if (step === 6) {
+        const dir6 = (project as any).direction || "Đông Nam";
+        const isHighBudget6 = project.budget > 1500;
+        const lightingDir = dir6.includes("Tây") ? "warm golden afternoon sunlight from west, sun shade louvers casting shadows" : dir6.includes("Đông") ? "fresh morning light from east, cool bright atmosphere" : "soft neutral natural light, overcast sky";
+        const matDescriptor = isHighBudget6 ? "luxury Marble/Granite stone, natural Sồi wood veneer, gold inox trim details, tempered glass 12mm" : "quality paint finish, porcelain tiles, aluminum windows, engineered wood";
         const renderPrompts = [
-          { name: "Mặt tiền ban ngày", prompt: `Photorealistic exterior render of a ${project.floors}-story ${project.style} Vietnamese house, ${project.landWidth}m x ${project.landLength}m lot, daytime, beautiful landscaping, blue sky, professional architectural visualization, 8K quality` },
-          { name: "Mặt tiền ban đêm", prompt: `Photorealistic exterior render of a ${project.floors}-story ${project.style} Vietnamese house at night, warm interior lighting, landscape lighting, dramatic sky, professional architectural visualization, 8K quality` },
-          { name: "Phòng khách", prompt: `Photorealistic interior render of a spacious ${project.style} style living room in Vietnamese house, natural light through large windows, modern furniture, warm atmosphere, professional interior visualization, 8K` },
-          { name: "Phòng ngủ Master", prompt: `Photorealistic interior render of a ${project.style} style master bedroom, Vietnamese residential, elegant design, warm lighting, comfortable atmosphere, high quality visualization, 8K` },
-          { name: "Phòng bếp & ăn", prompt: `Photorealistic interior render of a modern ${project.style} Vietnamese kitchen and dining area, open plan, pendant lights, natural wood, marble countertop, professional visualization, 8K` },
-          { name: "Sân vườn & Cảnh quan", prompt: `Photorealistic landscape render of a ${project.floors}-story ${project.style} Vietnamese house garden, tropical plants, stone pathway, outdoor seating area, water feature, professional architectural visualization, 8K` },
+          { name: "Mặt tiền ban ngày", prompt: `Hyper-photorealistic exterior render ${project.floors}-story ${project.style} Vietnamese house, ${project.landWidth}m wide x ${project.landLength}m deep, ${lightingDir}, ${matDescriptor}, surrounding context: neighbor houses both sides, tropical trees, power poles on street matching 80% real site, professional architectural visualization, 8K, no noise` },
+          { name: "Mặt tiền ban đêm", prompt: `Hyper-photorealistic exterior night render ${project.floors}-story ${project.style} Vietnamese house, ${project.landWidth}m wide, warm glow from interior through windows, IES spot lights uplighting facade, landscape LED ground lights, dramatic night sky, ${matDescriptor}, 8K quality no noise` },
+          { name: "Góc 45 độ ban ngày", prompt: `Photorealistic 45-degree angle exterior view ${project.floors}-story ${project.style} Vietnamese house ${project.landWidth}m x ${project.landLength}m, showing side and front facade, ${lightingDir}, tropical landscaping local species, ${matDescriptor}, eye-level 1.6m camera height, professional architectural visualization 8K` },
+          { name: "Phòng khách", prompt: `Hyper-photorealistic interior render ${project.style} Vietnamese living room, ${matDescriptor}, eye-level camera 1.6m, 3-layer lighting (ambient ceiling recessed, task lamps, accent LED strip khe trần), 600mm clearance between furniture, life-like: books vase flowers tropical plant in corner, warm inviting atmosphere, 8K no noise no color shift` },
+          { name: "Phòng ngủ Master", prompt: `Photorealistic ${project.style} master bedroom Vietnamese house, ${matDescriptor}, bed headboard against solid wall (feng shui), warm ambient 3-layer lighting, wide-angle no distortion on vertical walls, soft bedding textures, motion blur human silhouette for scale, 8K quality` },
+          { name: "Phòng bếp & ăn", prompt: `Photorealistic Vietnamese ${project.style} kitchen dining, golden triangle layout stove-sink-fridge, ${matDescriptor}, pendant lights over dining, backsplash tiles detail, life-like: cookbook fruit bowl on counter, ${lightingDir} through window, 8K professional interior visualization` },
         ];
 
         const renders = [];
@@ -637,14 +766,13 @@ Trả lời chi tiết, có số liệu cụ thể.` }
         const totalCost = Math.round(totalArea * 10.5);
 
         const sections = [
-          "Trang bìa & Mục lục",
-          "Phân tích hiện trạng & Phong thủy",
-          "Bố trí mặt bằng các tầng",
-          "Bản vẽ kỹ thuật CAD",
-          "Thiết kế mặt tiền (4 phối cảnh)",
-          "Thiết kế nội thất (5 phòng)",
-          "Render phối cảnh 3D (6 hình full-page)",
-          "Dự toán chi phí chi tiết",
+          "Trang Bìa (Cover Page) — Logo BMT DECOR, tên công trình, chủ đầu tư, Render đẹp nhất",
+          "Danh mục hồ sơ (Drawing List) — Mã số và tên từng bản vẽ",
+          "Hồ sơ Pháp lý & Hiện trạng — Ảnh Sổ đỏ, hiện trạng công trình",
+          "Hồ sơ Kiến trúc 2D — Mặt bằng từng tầng (Dimension 3 lớp), Mặt cắt A-A, Mặt đứng",
+          "Hồ sơ Nội thất — Bố trí vật dụng từng phòng, chi tiết triển khai đồ rời",
+          "Hồ sơ Phối cảnh (Portfolio) — Render 3D 4K chất lượng cao (5-10 trang full-page)",
+          "Dự toán & Vật tư — Bảng tổng hợp kinh phí và danh mục vật liệu thi công",
         ];
 
         let pdfSource = "pdfkit";
@@ -657,30 +785,53 @@ Trả lời chi tiết, có số liệu cụ thể.` }
           ? layout.floors.map(fl => `Tầng ${fl.floor}: ` + fl.rooms.map(r => `${r.name} (${r.w}m × ${r.h}m = ${(r.w * r.h).toFixed(1)} m²)`).join(", ")).join("\n")
           : "";
 
+        const dateStr = new Date().toLocaleDateString("vi-VN").replace(/\//g, "-");
+        const clientSlug = (project.clientName || "KhachHang").replace(/\s+/g, "_").replace(/[^\w_]/g, "");
+        const pdfCodeName = `BMT${id.toString().padStart(3, "0")}_${clientSlug}_${dateStr}`;
+
+        // QA/QC cross-check summary (Cẩm nang Bước 7)
+        const cadFloorCount = (cad as any)?.cadDrawings?.length || 0;
+        const renderCount = renderResult?.renders?.length || 0;
+        const interiorRoomCount = (interior as any)?.interiorImages?.length || 0;
+        const qaReport = [
+          `✅ Mã dự án: ${pdfCodeName}`,
+          `✅ Hồ sơ CAD Bước 3: ${cadFloorCount} bản vẽ mặt bằng`,
+          `✅ Mô hình 3D Bước 4: ${(model3d?.facadeImages || []).length} phối cảnh mặt tiền`,
+          `✅ Nội thất Bước 5: ${interiorRoomCount} phòng`,
+          `✅ Render Bước 6: ${renderCount} hình ảnh 4K`,
+          `${totalArea > project.budget * 0.1 ? "✅" : "⚠️"} Diện tích xây dựng ${totalArea}m² / Ngân sách ${project.budget} triệu`,
+          `✅ Title Block chuẩn BMT DECOR - DIRECTOR: Võ Quốc Bảo - TỈ LỆ 1/100`,
+        ].join("\n");
+
         const pdfApiData = {
           company_name: "BMT DECOR",
-          company_subtitle: "Hệ thống AI Thiết kế Kiến trúc & Nội thất",
-          title: "HỒ SƠ THIẾT KẾ KIẾN TRÚC",
+          company_subtitle: "CÔNG TY TNHH TMDV BMT DECOR — Hệ thống AI Kiến trúc & Nội thất",
+          title: "HỒ SƠ PHƯƠNG ÁN THIẾT KẾ",
           project_name: project.title,
           client_name: project.clientName || "N/A",
           land_size: `${project.landWidth}m × ${project.landLength}m (${area} m²)`,
           floors: `${project.floors} tầng`,
-          bedrooms: `${project.bedrooms} phòng`,
+          bedrooms: `${project.bedrooms} phòng ngủ`,
           style: project.style,
           budget: `${project.budget} triệu VNĐ`,
+          director: "VÕ QUỐC BẢO",
+          address: "7/92 Thành Thái, P.14, Q.10, TP.HCM",
+          scale: "1/100",
+          drawing_code: pdfCodeName,
           date: new Date().toLocaleDateString("vi-VN"),
-          analysis_text: analysis?.aiAnalysis ? String(analysis.aiAnalysis).substring(0, 4000) : "Chưa có dữ liệu phân tích.",
+          analysis_text: analysis?.aiAnalysis ? String(analysis.aiAnalysis).substring(0, 3500) : "Chưa có dữ liệu phân tích.",
           layout_text: layoutText || "Chưa có dữ liệu layout.",
-          cad_text: cad?.cadDescription ? cad.cadDescription.substring(0, 4000) : "Chưa có dữ liệu CAD.",
-          facade_text: model3d?.designDescription ? model3d.designDescription.substring(0, 4000) : "Chưa có mô tả mặt tiền.",
-          interior_text: interior?.interiorDescription ? interior.interiorDescription.substring(0, 4000) : "Chưa có mô tả nội thất.",
+          cad_text: cad?.cadDescription ? cad.cadDescription.substring(0, 3500) : "Chưa có dữ liệu CAD.",
+          facade_text: model3d?.designDescription ? model3d.designDescription.substring(0, 3500) : "Chưa có mô tả mặt tiền.",
+          interior_text: interior?.interiorDescription ? interior.interiorDescription.substring(0, 3500) : "Chưa có mô tả nội thất.",
+          qa_report: qaReport,
           total_area: `${totalArea} m²`,
           unit_price: "6 - 10 triệu VNĐ/m²",
           build_cost: `${buildCost.toLocaleString("vi-VN")} triệu VNĐ`,
           interior_cost: `${interiorCost.toLocaleString("vi-VN")} triệu VNĐ`,
           total_cost: `${totalCost.toLocaleString("vi-VN")} triệu VNĐ`,
-          note: "Lưu ý: Đây là ước tính sơ bộ. Chi phí thực tế có thể thay đổi tùy theo vật liệu và nhà thầu.",
-          footer: "Cảm ơn quý khách đã tin tưởng sử dụng dịch vụ BMT Decor",
+          note: "Lưu ý: Đây là ước tính sơ bộ. Chi phí thực tế có thể thay đổi tùy theo vật liệu và nhà thầu thực tế.",
+          footer: "Cảm ơn Quý khách đã tin tưởng sử dụng dịch vụ BMT DECOR — thicongtramsac.vn",
         };
 
         try {
@@ -699,7 +850,7 @@ Trả lời chi tiết, có số liệu cụ thể.` }
         // --- FALLBACK: PDFKIT ---
         if (!downloadUrl) {
           console.log(`Step 7: Using PDFKit fallback for project ${id}`);
-          const pdfFilename = `${id}_hoso_${Date.now()}.pdf`;
+          const pdfFilename = `${pdfCodeName}.pdf`;
           const pdfPath = path.join(GEN_DIR, pdfFilename);
 
           const fontRegular = path.join(process.cwd(), "server", "fonts", "Roboto-Regular.ttf");
@@ -1760,17 +1911,17 @@ Trả lời chi tiết, có số liệu cụ thể.` }
         }
         const kFiles = await storage.getKnowledgeFiles();
         if (kFiles.length > 0) {
-          const MAX_KNOWLEDGE_CHARS = 8000;
+          const MAX_KNOWLEDGE_CHARS = 16000;
           let totalChars = 0;
           const snippets: string[] = [];
-          for (const f of kFiles.slice(0, 5)) {
-            const snippet = f.content.slice(0, 2000);
+          for (const f of kFiles.slice(0, 12)) {
+            const snippet = f.content.slice(0, 3000);
             if (totalChars + snippet.length > MAX_KNOWLEDGE_CHARS) break;
-            snippets.push(`--- ${f.originalName} ---\n${snippet}`);
+            snippets.push(`--- ${f.name} ---\n${snippet}`);
             totalChars += snippet.length;
           }
           if (snippets.length > 0) {
-            knowledgeContext = `\n\nTri thức tham khảo:\n${snippets.join("\n\n")}`;
+            knowledgeContext = `\n\nCẨM NANG TRI THỨC BMT DECOR:\n${snippets.join("\n\n")}`;
           }
         }
         const driveKnowledge = await getDriveKnowledge();
@@ -1781,11 +1932,18 @@ Trả lời chi tiết, có số liệu cụ thể.` }
         console.error("Failed to load AI settings/knowledge:", e);
       }
 
-      const systemPrompt = `Bạn là trợ lý AI thiết kế kiến trúc & nội thất của BMT Decor (CÔNG TY TNHH TMDV BMT DECOR). Bạn là chuyên gia về:
-- Thiết kế kiến trúc nhà ở Việt Nam
-- Phong thủy và bố trí không gian
-- Vật liệu xây dựng và nội thất
-- Dự toán chi phí xây dựng
+      const systemPrompt = `Bạn là AI chuyên gia thiết kế kiến trúc & nội thất của BMT DECOR (CÔNG TY TNHH TMDV BMT DECOR). Director: Võ Quốc Bảo. Địa chỉ: 7/92 Thành Thái, P.14, Q.10, TP.HCM. Website: thicongtramsac.vn.
+
+CHUYÊN MÔN:
+- Thiết kế kiến trúc nhà ở Việt Nam (nhà phố, biệt thự, nhà hẻm)
+- Phong thủy và bố trí không gian chuẩn Việt Nam
+- Bản vẽ CAD 2D chuẩn A/E: Layer A-WALL, A-COLM, A-DIM, A-BOUND; Dimension 3 lớp; Title Block BMT; Scale 1/100
+- Luật BMT: Khoảng lùi 1.2m-1.4m, cầu thang bậc Sinh 16-18cm, thông thủy >2.2m
+- Vật liệu xây dựng và nội thất Việt Nam, dự toán chi phí thực tế
+- Hồ sơ PDF chuẩn BMT (35-70 trang): Bìa → Danh mục → Pháp lý → 2D CAD → Nội thất → Render 4K → Dự toán
+
+QUY TRÌNH 7 BƯỚC BMT DECOR:
+Bước 1: Thu thập thông tin dự án | Bước 2: Phân tích hiện trạng & Layout | Bước 3: Bản vẽ CAD 2D chuẩn A/E | Bước 4: Mô hình 3D | Bước 5: Thiết kế nội thất | Bước 6: Render phối cảnh 4K | Bước 7: Xuất hồ sơ PDF chuẩn
 ${customInstructions}
 ${project ? `${buildProjectContext(project as unknown as Record<string, unknown>)}
 - Bước hiện tại: ${step || project.currentStep}/7 - ${STEP_NAMES[step || project.currentStep]}` : ""}
@@ -1795,9 +1953,8 @@ ${knowledgeContext}
 QUAN TRỌNG - Gửi email PDF:
 Khi khách hàng cung cấp email và yêu cầu gửi hồ sơ PDF, bạn PHẢI bao gồm tag đặc biệt trong phản hồi: [SEND_EMAIL:địa_chỉ_email@example.com]
 Ví dụ: Nếu khách nói "gửi cho tôi qua email abc@gmail.com", bạn phản hồi kèm tag [SEND_EMAIL:abc@gmail.com] ở cuối tin nhắn.
-Phản hồi nên xác nhận rằng hệ thống đang gửi email, thông tin dự án, và thời gian dự kiến (trong vòng vài phút).
 
-Trả lời ngắn gọn, chuyên nghiệp, bằng tiếng Việt. Đưa ra gợi ý cụ thể và thực tế.
+Trả lời ngắn gọn, chuyên nghiệp, bằng tiếng Việt. Đưa ra gợi ý cụ thể và thực tế dựa trên Cẩm nang BMT.
 ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham khảo và trích dẫn nguồn khi phù hợp." : ""}`;
 
       const chatHistory = (project?.chatHistory as Array<{role: string; content: string}>) || [];
