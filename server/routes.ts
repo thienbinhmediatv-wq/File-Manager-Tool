@@ -2179,6 +2179,33 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
     res.json(progress);
   });
 
+  app.post("/api/drive-content", async (req, res) => {
+    try {
+      const { fileId } = req.body;
+      if (!fileId) return res.status(400).json({ message: "fileId required" });
+
+      const { extractTextFromPdf, extractTextFromDocx, extractTextFromImage, getFileType } = await import("./ocrService");
+      const fileType = getFileType(fileId);
+      
+      let content = "";
+      if (fileType === "pdf") {
+        content = await extractTextFromPdf(fileId, fileId);
+      } else if (fileType === "docx") {
+        content = await extractTextFromDocx(fileId, fileId);
+      } else if (fileType === "image") {
+        content = await extractTextFromImage(fileId, fileId);
+      } else {
+        const buffer = await (await import("./ocrService")).downloadFileBuffer(fileId);
+        content = buffer?.toString("utf-8") || "";
+      }
+      
+      res.json({ content: content.slice(0, 5000), fileId });
+    } catch (err) {
+      console.error("Drive content error:", err);
+      res.status(500).json({ message: "Failed to fetch content" });
+    }
+  });
+
   app.get("/api/templates", async (_req, res) => {
     try {
       const folders = await storage.getDriveFolders();
@@ -2250,6 +2277,46 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
       }
       cb(null, true);
     },
+  });
+
+  app.post("/api/knowledge-files/from-drive", async (req, res) => {
+    try {
+      const { fileId, fileName } = req.body;
+      if (!fileId) return res.status(400).json({ message: "fileId required" });
+
+      const { extractTextFromPdf, extractTextFromDocx, extractTextFromImage, getFileType } = await import("./ocrService");
+      const fileType = getFileType(fileId);
+      
+      let content = "";
+      if (fileType === "pdf") {
+        content = await extractTextFromPdf(fileId, fileId);
+      } else if (fileType === "docx") {
+        content = await extractTextFromDocx(fileId, fileId);
+      } else if (fileType === "image") {
+        content = await extractTextFromImage(fileId, fileId);
+      } else {
+        const buffer = await (await import("./ocrService")).downloadFileBuffer(fileId);
+        content = buffer?.toString("utf-8") || "";
+      }
+
+      if (!content) {
+        return res.status(400).json({ message: "Không thể trích xuất nội dung từ file" });
+      }
+
+      const name = fileName || fileId;
+      const file = await storage.createKnowledgeFile({
+        name,
+        originalName: `Drive-${name}`,
+        content: content.slice(0, 50000),
+        fileType: "drive",
+        fileSize: content.length,
+      });
+
+      res.json({ success: true, file, chars: content.length });
+    } catch (err) {
+      console.error("Add Drive knowledge error:", err);
+      res.status(500).json({ message: "Không thể thêm file Drive vào thư viện" });
+    }
   });
 
   app.post("/api/knowledge-files", knowledgeUpload.single("file"), async (req, res) => {

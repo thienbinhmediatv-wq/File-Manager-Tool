@@ -3,10 +3,11 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Save, Upload, Trash2, FileText, Brain, CreditCard, Loader2, AlertCircle, Lock, Eye, EyeOff, FolderSync, CheckCircle, XCircle, Database, BookOpen } from "lucide-react";
+import { Save, Upload, Trash2, FileText, Brain, CreditCard, Loader2, AlertCircle, Lock, Eye, EyeOff, FolderSync, CheckCircle, XCircle, Database, BookOpen, Link as LinkIcon } from "lucide-react";
 import { useRef } from "react";
 
 interface KnowledgeFile {
@@ -191,7 +192,24 @@ export default function Settings() {
           <CardHeader>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center">
-                <BookOpen className="w-5 h-5 text-orange-500" />
+                <LinkIcon className="w-5 h-5 text-orange-500" />
+              </div>
+              <div>
+                <CardTitle>Học từ Drive Links</CardTitle>
+                <CardDescription>Paste Drive link để AI tham khảo trực tiếp</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <DriveLinksLearner />
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/50">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                <BookOpen className="w-5 h-5 text-blue-500" />
               </div>
               <div>
                 <CardTitle>Thư viện Mẫu</CardTitle>
@@ -465,6 +483,104 @@ function DriveOcrProcessor() {
               {r.chars > 0 && <span className="text-green-600 font-medium flex-shrink-0">{r.chars.toLocaleString()} ký tự</span>}
               {r.status === "empty" && <span className="text-yellow-600 flex-shrink-0">Không có text</span>}
               {r.status === "error" && <span className="text-red-600 flex-shrink-0">Lỗi</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DriveLinksLearner() {
+  const { toast } = useToast();
+  const [driveLink, setDriveLink] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const filesQuery = useQuery<KnowledgeFile[]>({
+    queryKey: ["/api/knowledge-files"],
+  });
+
+  const handleAddDriveLink = async () => {
+    const link = driveLink.trim();
+    if (!link) {
+      toast({ title: "Lỗi", description: "Vui lòng nhập Drive link", variant: "destructive" });
+      return;
+    }
+
+    const fileIdMatch = link.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    if (!fileIdMatch) {
+      toast({ title: "Lỗi", description: "Link không hợp lệ. Dùng Google Drive share link", variant: "destructive" });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/knowledge-files/from-drive", {
+        fileId: fileIdMatch[1],
+        fileName: link.split("/").pop() || "Drive File",
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast({ title: "Thành công", description: `Đã thêm file (${data.chars} ký tự) vào thư viện` });
+        setDriveLink("");
+        queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
+      }
+    } catch {
+      toast({ title: "Lỗi", description: "Không thể thêm file Drive", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const driveFiles = filesQuery.data?.filter(f => f.fileType === "drive") || [];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        <Input
+          placeholder="Dán Google Drive link (https://drive.google.com/file/d/...)"
+          value={driveLink}
+          onChange={(e) => setDriveLink(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleAddDriveLink()}
+          disabled={isLoading}
+          data-testid="input-drive-link"
+        />
+        <Button
+          onClick={handleAddDriveLink}
+          disabled={isLoading || !driveLink.trim()}
+          className="gap-2"
+          data-testid="button-add-drive-link"
+        >
+          {isLoading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <LinkIcon className="w-4 h-4" />
+          )}
+          {isLoading ? "Đang thêm..." : "Thêm"}
+        </Button>
+      </div>
+
+      {driveFiles.length > 0 && (
+        <div className="bg-green-500/5 border border-green-200 rounded-lg p-3">
+          <p className="text-sm text-foreground">
+            AI đang học từ <span className="font-bold text-green-600">{driveFiles.length}</span> file Drive
+          </p>
+        </div>
+      )}
+
+      {driveFiles.length > 0 && (
+        <div className="space-y-2 max-h-40 overflow-y-auto">
+          {driveFiles.map((file) => (
+            <div
+              key={file.id}
+              className="flex items-center justify-between p-2 rounded-lg bg-muted/50 text-xs"
+              data-testid={`row-drive-file-${file.id}`}
+            >
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <LinkIcon className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
+                <span className="truncate">{file.originalName}</span>
+              </div>
+              <span className="text-muted-foreground flex-shrink-0">{formatFileSize(file.fileSize)}</span>
             </div>
           ))}
         </div>

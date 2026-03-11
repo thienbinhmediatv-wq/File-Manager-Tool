@@ -24,7 +24,23 @@ export function useChat(projectId: number) {
     setIsLoading(true);
 
     try {
-      const res = await apiRequest("POST", "/api/chat", { projectId, message, step });
+      const driveFileIdMatch = message.match(/\/d\/([a-zA-Z0-9-_]+)/);
+      let enhancedMessage = message;
+      
+      if (driveFileIdMatch) {
+        const fileId = driveFileIdMatch[1];
+        try {
+          const contentRes = await apiRequest("POST", "/api/drive-content", { fileId });
+          const contentData = await contentRes.json();
+          if (contentData.content) {
+            enhancedMessage = `${message}\n\n[Drive File Content - ${fileId}]:\n${contentData.content}`;
+          }
+        } catch (e) {
+          console.log("Could not fetch Drive content:", e);
+        }
+      }
+
+      const res = await apiRequest("POST", "/api/chat", { projectId, message: enhancedMessage, step });
       const data = await res.json();
       const aiMsg: ChatMessage = {
         role: "assistant",

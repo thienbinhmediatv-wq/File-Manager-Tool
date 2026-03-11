@@ -51,7 +51,7 @@ export function AIChatPanel({ messages, isLoading, onSendMessage }: AIChatPanelP
         </div>
         <div>
           <h3 className="font-semibold text-sm">AI Trợ lý thiết kế</h3>
-          <p className="text-xs text-muted-foreground">Bmt Decor AI + Web Search</p>
+          <p className="text-xs text-muted-foreground">Bmt Decor AI + Google Search + Drive Learning</p>
         </div>
         <div className="ml-auto flex items-center gap-1.5">
           <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
@@ -64,7 +64,7 @@ export function AIChatPanel({ messages, isLoading, onSendMessage }: AIChatPanelP
           <div className="text-center py-8 text-muted-foreground">
             <Bot className="w-12 h-12 mx-auto mb-3 text-primary/30" />
             <p className="text-sm">Hỏi AI về thiết kế, phong cách, vật liệu...</p>
-            <p className="text-xs mt-1 text-muted-foreground/60">AI sẽ tự động tìm kiếm Google khi cần tham khảo</p>
+            <p className="text-xs mt-1 text-muted-foreground/60">Paste Drive link hoặc hỏi bất cứ điều gì • AI sẽ tìm kiếm Google khi cần</p>
           </div>
         )}
         {messages.map((msg, i) => (
