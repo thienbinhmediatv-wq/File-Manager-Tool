@@ -2179,6 +2179,28 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
     res.json(progress);
   });
 
+  app.get("/api/templates", async (_req, res) => {
+    try {
+      const folders = await storage.getDriveFolders();
+      const templateFolder = folders.find(f => f.name.includes("Tai_lieu") || f.name.includes("mau"));
+      
+      if (!templateFolder) {
+        return res.json([]);
+      }
+
+      const files = await listDriveFiles();
+      const templates = files.filter(f => 
+        f.id.startsWith(templateFolder.folderId.substring(0, 10)) || 
+        f.name.includes(templateFolder.name)
+      ).slice(0, 20);
+
+      res.json(templates || []);
+    } catch (err) {
+      console.error("Get templates error:", err);
+      res.json([]);
+    }
+  });
+
   app.get("/api/drive-folders", async (_req, res) => {
     try {
       const folders = await storage.getDriveFolders();

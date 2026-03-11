@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Save, Upload, Trash2, FileText, Brain, CreditCard, Loader2, AlertCircle, Lock, Eye, EyeOff, FolderSync, CheckCircle, XCircle, Database } from "lucide-react";
+import { Save, Upload, Trash2, FileText, Brain, CreditCard, Loader2, AlertCircle, Lock, Eye, EyeOff, FolderSync, CheckCircle, XCircle, Database, BookOpen } from "lucide-react";
 import { useRef } from "react";
 
 interface KnowledgeFile {
@@ -186,6 +186,23 @@ export default function Settings() {
           <h1 className="text-2xl font-bold text-foreground" data-testid="text-settings-title">Cài đặt</h1>
           <p className="text-muted-foreground mt-1">Quản lý AI Instructions và file tri thức</p>
         </div>
+
+        <Card className="border-border/50">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center">
+                <BookOpen className="w-5 h-5 text-orange-500" />
+              </div>
+              <div>
+                <CardTitle>Thư viện Mẫu</CardTitle>
+                <CardDescription>Học từ các mẫu thiết kế trong Drive</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <TemplatesComponent />
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
@@ -452,6 +469,73 @@ function DriveOcrProcessor() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function TemplatesComponent() {
+  const templatesQuery = useQuery<any[]>({
+    queryKey: ["/api/templates"],
+    retry: false,
+  });
+
+  const [learned, setLearned] = useState<string[]>([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("learned_templates") || "[]";
+    setLearned(JSON.parse(saved));
+  }, []);
+
+  const handleLearn = (name: string) => {
+    const updated = learned.includes(name) 
+      ? learned.filter(t => t !== name)
+      : [...learned, name];
+    setLearned(updated);
+    localStorage.setItem("learned_templates", JSON.stringify(updated));
+  };
+
+  if (templatesQuery.isLoading) {
+    return <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
+  }
+
+  const templates = templatesQuery.data || [];
+  const learningCount = templates.filter(t => learned.includes(t.name)).length;
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-blue-500/5 border border-blue-200 rounded-lg p-4">
+        <p className="text-sm text-foreground">
+          Đã học: <span className="font-bold text-blue-600">{learningCount}/{templates.length}</span> mẫu
+        </p>
+      </div>
+      
+      {templates.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <p>Chưa có mẫu nào trong thư viện</p>
+        </div>
+      ) : (
+        <div className="grid gap-2">
+          {templates.slice(0, 15).map((template) => (
+            <div key={template.name} className="flex items-center justify-between p-3 rounded-lg border border-border/50 hover:bg-muted/50 transition-colors">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{template.name}</p>
+                <p className="text-xs text-muted-foreground">{template.mimeType || "File"}</p>
+              </div>
+              <Button
+                size="sm"
+                variant={learned.includes(template.name) ? "default" : "outline"}
+                onClick={() => handleLearn(template.name)}
+                className="gap-2 ml-2 flex-shrink-0"
+                data-testid={`button-learn-template-${template.name}`}
+              >
+                {learned.includes(template.name) ? "✓ Đã học" : "Học"}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground">AI sẽ tham khảo các mẫu đã chọn trong các bước xử lý</p>
     </div>
   );
 }
