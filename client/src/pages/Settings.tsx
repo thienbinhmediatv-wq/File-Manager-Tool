@@ -6,7 +6,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Save, Upload, Trash2, FileText, Brain, CreditCard, Loader2, AlertCircle, Lock, Eye, EyeOff } from "lucide-react";
+import { Save, Upload, Trash2, FileText, Brain, CreditCard, Loader2, AlertCircle, Lock, Eye, EyeOff, FolderSync, CheckCircle, XCircle, Database } from "lucide-react";
+import { useRef } from "react";
 
 interface KnowledgeFile {
   id: number;
@@ -304,6 +305,25 @@ export default function Settings() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center">
+                <Database className="w-5 h-5 text-orange-500" />
+              </div>
+              <div>
+                <CardTitle>Xử lý tri thức từ Drive (OCR)</CardTitle>
+                <CardDescription>
+                  Trích xuất text từ PDF, DOCX, hình ảnh trong Google Drive → lưu vào kho tri thức AI
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <DriveOcrProcessor />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
                 <CreditCard className="w-5 h-5 text-green-500" />
               </div>
@@ -321,6 +341,118 @@ export default function Settings() {
         </Card>
       </div>
     </AppLayout>
+  );
+}
+
+interface OcrProgress {
+  total: number;
+  processed: number;
+  current: string;
+  results: { name: string; chars: number; status: "ok" | "empty" | "error" }[];
+  done: boolean;
+  notStarted?: boolean;
+}
+
+function DriveOcrProcessor() {
+  const { toast } = useToast();
+  const pollingRef = useRef<any>(null);
+
+  const progressQuery = useQuery<OcrProgress>({
+    queryKey: ["/api/drive-ocr/progress"],
+    refetchInterval: (data: any) => {
+      if (!data || data.notStarted || data.done) return false;
+      return 2000;
+    },
+  });
+
+  const processMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/drive-ocr/process");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Bắt đầu xử lý OCR", description: "Đang trích xuất text từ tất cả files Drive..." });
+      queryClient.invalidateQueries({ queryKey: ["/api/drive-ocr/progress"] });
+      pollingRef.current = setInterval(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/drive-ocr/progress"] });
+      }, 2000);
+    },
+    onError: () => {
+      toast({ title: "Lỗi", description: "Không thể bắt đầu xử lý OCR", variant: "destructive" });
+    },
+  });
+
+  const progress = progressQuery.data;
+  const isRunning = progress && !progress.done && !progress.notStarted;
+  const pct = progress && progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0;
+
+  if (isRunning === false && progress?.done && pollingRef.current) {
+    clearInterval(pollingRef.current);
+    pollingRef.current = null;
+  }
+
+  return (
+    <div className="space-y-4" data-testid="section-drive-ocr">
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-muted-foreground">
+          {progress?.notStarted && "Chưa xử lý. Nhấn nút để bắt đầu trích xuất text từ tất cả files."}
+          {isRunning && (
+            <span className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-orange-500" />
+              Đang xử lý... ({progress.processed}/{progress.total}) {progress.current && `— ${progress.current.split("/").pop()}`}
+            </span>
+          )}
+          {progress?.done && !progress.notStarted && (
+            <span className="flex items-center gap-2 text-green-600">
+              <CheckCircle className="w-4 h-4" />
+              Hoàn tất! {progress.results.filter(r => r.status === "ok").length}/{progress.total} files đọc được
+            </span>
+          )}
+        </div>
+        <Button
+          onClick={() => processMutation.mutate()}
+          disabled={processMutation.isPending || !!isRunning}
+          variant={progress?.done && !progress.notStarted ? "outline" : "default"}
+          className="gap-2"
+          data-testid="button-ocr-process"
+        >
+          {isRunning ? (
+            <><Loader2 className="w-4 h-4 animate-spin" />Đang xử lý...</>
+          ) : (
+            <><FolderSync className="w-4 h-4" />{progress?.done && !progress.notStarted ? "Xử lý lại" : "Bắt đầu OCR"}</>
+          )}
+        </Button>
+      </div>
+
+      {isRunning && progress.total > 0 && (
+        <div className="w-full bg-muted rounded-full h-2">
+          <div
+            className="bg-orange-500 h-2 rounded-full transition-all duration-500"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
+
+      {progress?.results && progress.results.length > 0 && (
+        <div className="space-y-1 max-h-48 overflow-y-auto">
+          {progress.results.map((r, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs p-2 rounded-lg bg-muted/50" data-testid={`row-ocr-result-${i}`}>
+              {r.status === "ok" ? (
+                <CheckCircle className="w-3 h-3 text-green-500 flex-shrink-0" />
+              ) : r.status === "empty" ? (
+                <AlertCircle className="w-3 h-3 text-yellow-500 flex-shrink-0" />
+              ) : (
+                <XCircle className="w-3 h-3 text-red-500 flex-shrink-0" />
+              )}
+              <span className="text-muted-foreground truncate flex-1">{r.name.split("/").pop()}</span>
+              {r.chars > 0 && <span className="text-green-600 font-medium flex-shrink-0">{r.chars.toLocaleString()} ký tự</span>}
+              {r.status === "empty" && <span className="text-yellow-600 flex-shrink-0">Không có text</span>}
+              {r.status === "error" && <span className="text-red-600 flex-shrink-0">Lỗi</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

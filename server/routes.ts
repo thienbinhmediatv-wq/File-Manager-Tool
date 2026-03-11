@@ -10,7 +10,7 @@ import multer from "multer";
 import * as jose from "jose";
 import sharp from "sharp";
 import { sendPdfEmail } from "./emailService";
-import { getDriveKnowledge, listDriveFiles, clearDriveCache } from "./driveKnowledge";
+import { getDriveKnowledge, listDriveFiles, clearDriveCache, processAllDriveFiles, getOcrProgress } from "./driveKnowledge";
 
 const SERPAPI_KEY = process.env.SERPAPI_KEY || "";
 const ARTIFICIAL_STUDIO_KEY = process.env.ARTIFICIAL_STUDIO_API_KEY || "";
@@ -2002,6 +2002,24 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
   app.post("/api/drive-cache/clear", (_req, res) => {
     clearDriveCache();
     res.json({ success: true });
+  });
+
+  app.post("/api/drive-ocr/process", async (_req, res) => {
+    try {
+      const progress = await processAllDriveFiles();
+      res.json({ message: "OCR processing started", ...progress });
+    } catch (err) {
+      console.error("OCR process error:", err);
+      res.status(500).json({ message: "OCR processing failed" });
+    }
+  });
+
+  app.get("/api/drive-ocr/progress", (_req, res) => {
+    const progress = getOcrProgress();
+    if (!progress) {
+      return res.json({ total: 0, processed: 0, current: "", results: [], done: true, notStarted: true });
+    }
+    res.json(progress);
   });
 
   app.get("/api/drive-folders", async (_req, res) => {

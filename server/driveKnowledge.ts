@@ -1,5 +1,6 @@
 import { ReplitConnectors } from "@replit/connectors-sdk";
 import { storage } from "./storage";
+import { extractTextFromPdf, extractTextFromDocx, extractTextFromImage, getFileType } from "./ocrService";
 
 const DEFAULT_FOLDER_ID = "1bX8XfBMq_l3oFT3edht2RLlddHiYLbaK";
 const connectors = new ReplitConnectors();
@@ -21,12 +22,100 @@ interface CachedKnowledge {
 let cache: CachedKnowledge | null = null;
 const CACHE_TTL = 30 * 60 * 1000;
 const TEXT_EXTENSIONS = [".txt", ".md", ".csv", ".json"];
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_DEPTH = 5;
 
 function isTextFile(name: string): boolean {
   const lower = name.toLowerCase();
   return TEXT_EXTENSIONS.some(ext => lower.endsWith(ext));
+}
+
+function isProcessableFile(name: string): boolean {
+  const type = getFileType(name);
+  return type === "pdf" || type === "docx" || type === "image" || type === "text";
+}
+
+export interface OcrProgress {
+  total: number;
+  processed: number;
+  current: string;
+  results: { name: string; chars: number; status: "ok" | "empty" | "error" }[];
+  done: boolean;
+}
+
+let ocrProgress: OcrProgress | null = null;
+
+export function getOcrProgress(): OcrProgress | null {
+  return ocrProgress;
+}
+
+export async function processAllDriveFiles(): Promise<OcrProgress> {
+  if (ocrProgress && !ocrProgress.done) {
+    return ocrProgress;
+  }
+
+  const files = await listDriveFiles();
+  const processable = files.filter(f => isProcessableFile(f.name));
+
+  ocrProgress = {
+    total: processable.length,
+    processed: 0,
+    current: "",
+    results: [],
+    done: false,
+  };
+
+  (async () => {
+    for (const file of processable) {
+      ocrProgress!.current = file.name;
+
+      try {
+        const type = getFileType(file.name);
+        let text = "";
+
+        if (type === "pdf") {
+          text = await extractTextFromPdf(file.id, file.name);
+        } else if (type === "docx") {
+          text = await extractTextFromDocx(file.id, file.name);
+        } else if (type === "image") {
+          text = await extractTextFromImage(file.id, file.name);
+        } else if (type === "text") {
+          const response = await connectors.proxy("google-drive", `/drive/v3/files/${file.id}?alt=media`, { method: "GET" });
+          text = await response.text();
+        }
+
+        if (text && text.length > 50) {
+          const safeName = file.name.replace(/\//g, "_");
+          const existing = (await storage.getKnowledgeFiles()).find(f => f.originalName === file.name);
+          if (existing) {
+            await storage.deleteKnowledgeFile(existing.id);
+          }
+          await storage.createKnowledgeFile({
+            name: safeName,
+            originalName: file.name,
+            content: text.slice(0, 100000),
+            fileType: getFileType(file.name),
+            fileSize: text.length,
+          });
+          ocrProgress!.results.push({ name: file.name, chars: text.length, status: "ok" });
+        } else {
+          ocrProgress!.results.push({ name: file.name, chars: 0, status: "empty" });
+        }
+      } catch (err) {
+        console.error(`OCR process error for ${file.name}:`, err);
+        ocrProgress!.results.push({ name: file.name, chars: 0, status: "error" });
+      }
+
+      ocrProgress!.processed++;
+    }
+
+    ocrProgress!.done = true;
+    ocrProgress!.current = "";
+    clearDriveCache();
+    console.log("[OCR] All files processed!");
+  })();
+
+  return ocrProgress;
 }
 
 function isFolder(mimeType: string): boolean {
