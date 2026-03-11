@@ -8,6 +8,7 @@ import path from "path";
 import PDFDocument from "pdfkit";
 import multer from "multer";
 import * as jose from "jose";
+import sharp from "sharp";
 import { sendPdfEmail } from "./emailService";
 import { getDriveKnowledge, listDriveFiles, clearDriveCache } from "./driveKnowledge";
 
@@ -129,6 +130,39 @@ const openai = new OpenAI({
 
 const GEN_DIR = path.join(process.cwd(), "public", "generated");
 if (!fs.existsSync(GEN_DIR)) fs.mkdirSync(GEN_DIR, { recursive: true });
+
+async function compressBase64ToFile(base64Url: string, quality = 60): Promise<string | null> {
+  try {
+    const match = base64Url.match(/^data:image\/\w+;base64,(.+)$/);
+    if (!match) return null;
+    const inputBuf = Buffer.from(match[1], "base64");
+    const outFile = path.join(GEN_DIR, `cimg_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`);
+    await sharp(inputBuf).jpeg({ quality }).toFile(outFile);
+    return outFile;
+  } catch (e) {
+    console.error("compressBase64ToFile error:", e);
+    return null;
+  }
+}
+
+async function preCompressImages(imageUrls: string[], quality = 60): Promise<Map<string, string>> {
+  const cache = new Map<string, string>();
+  await Promise.all(
+    imageUrls.filter(u => u && u.startsWith("data:image/")).map(async (url) => {
+      const compressed = await compressBase64ToFile(url, quality);
+      if (compressed) cache.set(url, compressed);
+    })
+  );
+  return cache;
+}
+
+async function savePdfToGenerated(projectId: number, pdfBuffer: Buffer, projectTitle: string): Promise<string> {
+  const safeName = projectTitle.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 40) || "project";
+  const fileName = `BMT_Decor_${safeName}_${projectId}_${Date.now()}.pdf`;
+  const filePath = path.join(GEN_DIR, fileName);
+  fs.writeFileSync(filePath, pdfBuffer);
+  return `/generated/${fileName}`;
+}
 
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -381,6 +415,7 @@ export async function registerRoutes(
     const id = parseInt(req.params.id);
     const step = parseInt(req.params.step);
     if (isNaN(id) || isNaN(step) || step < 1 || step > 7) return res.status(400).json({ message: "Invalid step" });
+    if (step >= 5) res.setTimeout(120000);
     const project = await storage.getProject(id);
     if (!project) return res.status(404).json({ message: "Project not found" });
     if (step > 1) {
@@ -680,6 +715,15 @@ Trả lời chi tiết, có số liệu cụ thể.` }
           const GREEN_BG = "#f0fff4";
           const GREEN_TXT = "#276749";
 
+          // Pre-compress all base64 images before PDF generation
+          const allImgUrls: string[] = [
+            ...(model3d?.facadeImages || []),
+            ...(interior?.interiorImages?.map((i: {url: string}) => i.url) || []),
+            ...(renderResult?.renders?.map((r: {url: string}) => r.url) || []),
+            ...(cad?.cadDrawings?.map((d: {imageUrl?: string}) => d.imageUrl || "") || []),
+          ].filter(Boolean);
+          const compressedImgCache = await preCompressImages(allImgUrls, 60);
+
           const doc = new PDFDocument({ size: "A4", margin: M });
           let pdfKitPages = 1;
           doc.on("pageAdded", () => { pdfKitPages++; });
@@ -701,10 +745,11 @@ Trả lời chi tiết, có số liệu cụ thể.` }
           };
 
           let embeddedImageCount = 0;
-          const tmpFiles: string[] = [];
+          const tmpFiles: string[] = [...compressedImgCache.values()];
 
           const resolveImage = (imgUrl: string): string | Buffer | null => {
             if (!imgUrl) return null;
+            if (compressedImgCache.has(imgUrl)) return compressedImgCache.get(imgUrl)!;
             if (imgUrl.startsWith("data:image/")) {
               const match = imgUrl.match(/^data:image\/\w+;base64,(.+)$/);
               if (match) {
@@ -1151,6 +1196,7 @@ Trả lời chi tiết, có số liệu cụ thể.` }
   });
 
   app.get("/api/projects/:id/download-pdf", async (req, res) => {
+    res.setTimeout(120000);
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid project ID" });
@@ -1188,8 +1234,17 @@ Trả lời chi tiết, có số liệu cụ thể.` }
       const GREEN_BG = "#f0fff4";
       const GREEN_TXT = "#276749";
 
+      // Pre-compress all base64 images before PDF generation (60% quality JPEG)
+      const allDlImgUrls: string[] = [
+        ...(model3d?.facadeImages || []),
+        ...(interior?.interiorImages?.map((i: {url: string}) => i.url) || []),
+        ...(renderResult?.renders?.map((r: {url: string}) => r.url) || []),
+        ...(cad?.cadDrawings?.map((d: {imageUrl?: string}) => d.imageUrl || "") || []),
+      ].filter(Boolean);
+      const dlCompressedCache = await preCompressImages(allDlImgUrls, 60);
+
       const doc = new PDFDocument({ size: "A4", margin: 0 });
-      const tempFiles: string[] = [];
+      const tempFiles: string[] = [...dlCompressedCache.values()];
 
       if (fs.existsSync(fontRegular)) doc.registerFont("VN", fontRegular);
       if (fs.existsSync(fontBold)) doc.registerFont("VN-Bold", fontBold);
@@ -1198,6 +1253,7 @@ Trả lời chi tiết, có số liệu cụ thể.` }
 
       const resolveImg = (imgUrl: string): string | null => {
         if (!imgUrl) return null;
+        if (dlCompressedCache.has(imgUrl)) return dlCompressedCache.get(imgUrl)!;
         if (imgUrl.startsWith("data:image/")) {
           const match = imgUrl.match(/^data:image\/\w+;base64,(.+)$/);
           if (match) {
@@ -1640,6 +1696,7 @@ Trả lời chi tiết, có số liệu cụ thể.` }
   });
 
   app.post("/api/projects/:id/send-email", async (req, res) => {
+    res.setTimeout(120000);
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid project ID" });
@@ -1650,17 +1707,21 @@ Trả lời chi tiết, có số liệu cụ thể.` }
       const project = await storage.getProject(id);
       if (!project) return res.status(404).json({ message: "Project not found" });
 
-      const protocol = req.protocol || "https";
-      const host = req.get("host") || "localhost:5000";
-      const pdfUrl = `${protocol}://${host}/api/projects/${id}/download-pdf`;
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+      const host = req.get("host") || "thicongtramsac.vn";
+      const pdfApiUrl = `${protocol}://${host}/api/projects/${id}/download-pdf`;
 
-      const pdfResp = await fetch(pdfUrl);
+      const pdfResp = await fetch(pdfApiUrl);
       if (!pdfResp.ok) {
         return res.status(500).json({ message: "Không thể tạo PDF" });
       }
       const pdfBuffer = Buffer.from(await pdfResp.arrayBuffer());
 
-      const result = await sendPdfEmail(email, project.title, project.clientName, pdfBuffer);
+      // Save PDF to public/generated/ and build public download link
+      const pdfRelPath = await savePdfToGenerated(id, pdfBuffer, project.title);
+      const publicPdfUrl = `https://thicongtramsac.vn${pdfRelPath}`;
+
+      const result = await sendPdfEmail(email, project.title, project.clientName, publicPdfUrl);
       res.json(result);
     } catch (err) {
       console.error("Send email error:", err);
@@ -1763,11 +1824,13 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
           try {
             const domain = process.env.REPLIT_DOMAINS?.split(",")[0] || req.get("host") || "localhost:5000";
             const protocol = domain.includes("localhost") ? "http" : "https";
-            const pdfUrl = `${protocol}://${domain}/api/projects/${project.id}/download-pdf`;
-            const pdfResp = await fetch(pdfUrl);
+            const pdfApiUrl = `${protocol}://${domain}/api/projects/${project.id}/download-pdf`;
+            const pdfResp = await fetch(pdfApiUrl);
             if (pdfResp.ok) {
               const pdfBuffer = Buffer.from(await pdfResp.arrayBuffer());
-              emailResult = await sendPdfEmail(recipientEmail, project.title, project.clientName, pdfBuffer);
+              const pdfRelPath = await savePdfToGenerated(project.id, pdfBuffer, project.title);
+              const publicPdfUrl = `https://thicongtramsac.vn${pdfRelPath}`;
+              emailResult = await sendPdfEmail(recipientEmail, project.title, project.clientName, publicPdfUrl);
               emailSent = emailResult.success;
             } else {
               emailResult = { success: false, message: "Không thể tạo PDF để gửi email" };
