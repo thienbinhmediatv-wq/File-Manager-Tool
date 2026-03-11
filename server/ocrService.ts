@@ -40,19 +40,8 @@ export async function extractTextFromPdf(fileId: string, fileName: string): Prom
 }
 
 async function ocrImagePdf(buffer: Buffer, fileName: string): Promise<string> {
-  try {
-    const { createWorker } = await import("tesseract.js");
-    const worker = await createWorker("vie+eng");
-
-    const { data: { text } } = await worker.recognize(buffer);
-    await worker.terminate();
-
-    console.log(`[OCR] Tesseract extracted ${text.length} chars from: ${fileName}`);
-    return text.trim();
-  } catch (err) {
-    console.error(`[OCR] Tesseract error for ${fileName}:`, err);
-    return "";
-  }
+  console.log(`[OCR] Image-based PDF detected (no text layer): ${fileName} - requires external PDF-to-image conversion`);
+  return "";
 }
 
 export async function extractTextFromDocx(fileId: string, fileName: string): Promise<string> {
