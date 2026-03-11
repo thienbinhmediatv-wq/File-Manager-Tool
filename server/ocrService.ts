@@ -1,6 +1,8 @@
 import { ReplitConnectors } from "@replit/connectors-sdk";
+import { createRequire } from "module";
 
 const connectors = new ReplitConnectors();
+const _require = createRequire(import.meta.url);
 
 async function downloadFileBuffer(fileId: string): Promise<Buffer | null> {
   try {
@@ -17,13 +19,14 @@ async function downloadFileBuffer(fileId: string): Promise<Buffer | null> {
   }
 }
 
+export { downloadFileBuffer };
+
 export async function extractTextFromPdf(fileId: string, fileName: string): Promise<string> {
   try {
     const buffer = await downloadFileBuffer(fileId);
     if (!buffer) return "";
 
-    const pdfParseModule = await import("pdf-parse");
-    const pdfParse = pdfParseModule.default || pdfParseModule;
+    const pdfParse = _require("pdf-parse");
     const data = await pdfParse(buffer);
     const text = data.text?.trim() || "";
 
@@ -32,17 +35,12 @@ export async function extractTextFromPdf(fileId: string, fileName: string): Prom
       return text;
     }
 
-    console.log(`[OCR] PDF has no extractable text (image-based), skipping: ${fileName}`);
+    console.log(`[OCR] PDF no text layer (image-based), skipping: ${fileName}`);
     return "";
   } catch (err) {
     console.error(`[OCR] PDF extract error for ${fileName}:`, err);
     return "";
   }
-}
-
-async function ocrImagePdf(buffer: Buffer, fileName: string): Promise<string> {
-  console.log(`[OCR] Image-based PDF detected (no text layer): ${fileName} - requires external PDF-to-image conversion`);
-  return "";
 }
 
 export async function extractTextFromDocx(fileId: string, fileName: string): Promise<string> {
@@ -84,7 +82,7 @@ export function getFileType(name: string): "pdf" | "docx" | "image" | "text" | "
   if (lower.endsWith(".pdf")) return "pdf";
   if (lower.endsWith(".docx") || lower.endsWith(".doc")) return "docx";
   if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".webp")) return "image";
-  if (lower.endsWith(".txt") || lower.endsWith(".md") || lower.endsWith(".csv") || lower.endsWith(".json") || 
+  if (lower.endsWith(".txt") || lower.endsWith(".md") || lower.endsWith(".csv") || lower.endsWith(".json") ||
       lower.endsWith(".xlsx") || lower.endsWith(".xls") || lower.endsWith(".pptx") || lower.endsWith(".ppt")) return "text";
   return "unknown";
 }

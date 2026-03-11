@@ -114,17 +114,30 @@ Each step (3-7) has a corresponding Cẩm nang (handbook) stored in `knowledge_f
 
 ## Google Drive Integration
 - **Multi-folder support**: Database table `drive_folders` stores multiple Drive folder IDs
-- **Default folder**: `1bX8XfBMq_l3oFT3edht2RLlddHiYLbaK` (BMT Decor)
-- **DepDecor folder** (added): `1Yor7yGIaYQjylt1aydThqY75-5Mdoj94`
+- **7 configured folders**: Knowledge (depdecor.vn), DepDecor, JSON_Logic, Lenh_Kien_Thuc, Tai_lieu_mau, New Folder 1, New Folder 2
 - `server/driveKnowledge.ts` - Syncs from all configured folders via Replit Connectors
 - Text files (.txt, .md, .csv, .json) injected into AI chat context as knowledge
 - 30-minute cache TTL for Drive content
+- **OCR System**: Extract text from PDF/DOCX/images in Drive → saved to `knowledge_files` DB
+  - `server/ocrService.ts` - pdf-parse v1.1.1 (CJS via createRequire), mammoth for DOCX, tesseract.js for images
+  - `POST /api/drive-ocr/process` - Trigger OCR for all 70 Drive files
+  - `GET /api/drive-ocr/progress` - Check OCR progress (total/processed/current/results)
+- **Drive Learning Tool**: Paste any Drive link in Settings → AI extracts + saves to knowledge_files
 - **API Endpoints**:
   - `GET /api/drive-folders` - List all configured folders
   - `POST /api/drive-folders` - Add new folder (name, folderId)
   - `DELETE /api/drive-folders/:id` - Remove folder
   - `GET /api/drive-files` - List files from all folders
   - `POST /api/drive-cache/clear` - Clear cache
+  - `POST /api/drive-content` - Fetch content of a single Drive file by fileId
+  - `GET /api/templates` - List files in Tai_lieu_mau folder
+  - `POST /api/knowledge-files/from-drive` - Add Drive file to knowledge_files
+
+## Known Behaviors
+- Image-based PDFs (no text layer) return empty — expected, gracefully skipped
+- OCR runs in background; must manually re-trigger via Settings after app restart
+- pdf-parse uses `createRequire` (CJS) to avoid ESM path resolution issues in tsx
+- AI chat auto-detects Drive links in messages and fetches file content
 
 ## External APIs
 - **SerpAPI** (`SERPAPI_KEY`): Google search for design references
