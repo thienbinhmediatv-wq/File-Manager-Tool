@@ -22,7 +22,8 @@ export async function extractTextFromPdf(fileId: string, fileName: string): Prom
     const buffer = await downloadFileBuffer(fileId);
     if (!buffer) return "";
 
-    const pdfParse = (await import("pdf-parse")).default;
+    const pdfParseModule = await import("pdf-parse");
+    const pdfParse = pdfParseModule.default || pdfParseModule;
     const data = await pdfParse(buffer);
     const text = data.text?.trim() || "";
 
@@ -31,8 +32,8 @@ export async function extractTextFromPdf(fileId: string, fileName: string): Prom
       return text;
     }
 
-    console.log(`[OCR] PDF has no extractable text (image-based), trying OCR: ${fileName}`);
-    return await ocrImagePdf(buffer, fileName);
+    console.log(`[OCR] PDF has no extractable text (image-based), skipping: ${fileName}`);
+    return "";
   } catch (err) {
     console.error(`[OCR] PDF extract error for ${fileName}:`, err);
     return "";
