@@ -94,6 +94,7 @@ export function getFileType(name: string): "pdf" | "docx" | "image" | "text" | "
   if (lower.endsWith(".pdf")) return "pdf";
   if (lower.endsWith(".docx") || lower.endsWith(".doc")) return "docx";
   if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".webp")) return "image";
-  if (lower.endsWith(".txt") || lower.endsWith(".md") || lower.endsWith(".csv") || lower.endsWith(".json")) return "text";
+  if (lower.endsWith(".txt") || lower.endsWith(".md") || lower.endsWith(".csv") || lower.endsWith(".json") || 
+      lower.endsWith(".xlsx") || lower.endsWith(".xls") || lower.endsWith(".pptx") || lower.endsWith(".ppt")) return "text";
   return "unknown";
 }
