@@ -1,8 +1,12 @@
 import { ReplitConnectors } from "@replit/connectors-sdk";
-import { createRequire } from "module";
 
 const connectors = new ReplitConnectors();
-const _require = createRequire(import.meta.url);
+
+// Dynamic require for pdf-parse - works in both dev and production
+function getPdfParse() {
+  // In production, use require(); in dev, this also works
+  return require("pdf-parse");
+}
 
 async function downloadFileBuffer(fileId: string): Promise<Buffer | null> {
   try {
@@ -26,7 +30,7 @@ export async function extractTextFromPdf(fileId: string, fileName: string): Prom
     const buffer = await downloadFileBuffer(fileId);
     if (!buffer) return "";
 
-    const pdfParse = _require("pdf-parse");
+    const pdfParse = getPdfParse();
     const data = await pdfParse(buffer);
     const text = data.text?.trim() || "";
 
