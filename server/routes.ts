@@ -2004,6 +2004,44 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
     res.json({ success: true });
   });
 
+  app.get("/api/drive-folders", async (_req, res) => {
+    try {
+      const folders = await storage.getDriveFolders();
+      res.json(folders);
+    } catch (err) {
+      console.error("Get drive folders error:", err);
+      res.status(500).json({ message: "Failed to get folders" });
+    }
+  });
+
+  app.post("/api/drive-folders", async (req, res) => {
+    try {
+      const { name, folderId } = req.body;
+      if (!name || !folderId) {
+        return res.status(400).json({ message: "Name and folderId required" });
+      }
+      const folder = await storage.createDriveFolder({ name, folderId });
+      clearDriveCache();
+      res.json(folder);
+    } catch (err) {
+      console.error("Create drive folder error:", err);
+      res.status(500).json({ message: "Failed to create folder" });
+    }
+  });
+
+  app.delete("/api/drive-folders/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid folder ID" });
+      await storage.deleteDriveFolder(id);
+      clearDriveCache();
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Delete drive folder error:", err);
+      res.status(500).json({ message: "Failed to delete folder" });
+    }
+  });
+
   const knowledgeUpload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024 },

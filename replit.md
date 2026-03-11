@@ -32,6 +32,7 @@ BMT Decor (CÔNG TY TNHH TMDV BMT DECOR) is an AI-powered Vietnamese architectur
 - **projects** - Project data with 7-step workflow fields, JSON result columns
 - **ai_settings** - Custom AI instructions (single row, upsert pattern)
 - **knowledge_files** - Uploaded knowledge files (content stored as text in DB)
+- **drive_folders** - Google Drive folder IDs for multi-source knowledge (name, folderId, createdAt)
 - **conversations + messages** - AI chat history
 
 ## 7-Step Workflow
@@ -92,12 +93,18 @@ BMT Decor (CÔNG TY TNHH TMDV BMT DECOR) is an AI-powered Vietnamese architectur
 - Orange accent color (#e8830c) matching BMT Decor brand
 
 ## Google Drive Integration
-- `server/driveKnowledge.ts` - Google Drive connector via Replit Connectors
-- BMT Decor folder ID: `1bX8XfBMq_l3oFT3edht2RLlddHiYLbaK`
-- Text files (.txt, .md, .csv, .json) from Drive folder injected into AI chat context as knowledge
+- **Multi-folder support**: Database table `drive_folders` stores multiple Drive folder IDs
+- **Default folder**: `1bX8XfBMq_l3oFT3edht2RLlddHiYLbaK` (BMT Decor)
+- **DepDecor folder** (added): `1Yor7yGIaYQjylt1aydThqY75-5Mdoj94`
+- `server/driveKnowledge.ts` - Syncs from all configured folders via Replit Connectors
+- Text files (.txt, .md, .csv, .json) injected into AI chat context as knowledge
 - 30-minute cache TTL for Drive content
-- `GET /api/drive-files` - List files in BMT Decor Drive folder
-- `POST /api/drive-cache/clear` - Clear Drive knowledge cache
+- **API Endpoints**:
+  - `GET /api/drive-folders` - List all configured folders
+  - `POST /api/drive-folders` - Add new folder (name, folderId)
+  - `DELETE /api/drive-folders/:id` - Remove folder
+  - `GET /api/drive-files` - List files from all folders
+  - `POST /api/drive-cache/clear` - Clear cache
 
 ## External APIs
 - **SerpAPI** (`SERPAPI_KEY`): Google search for design references
