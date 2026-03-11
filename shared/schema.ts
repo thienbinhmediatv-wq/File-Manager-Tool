@@ -5,6 +5,13 @@ import { z } from "zod";
 
 export * from "./models/chat";
 
+export const driveFolders = pgTable("drive_folders", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  folderId: text("folder_id").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const projects = pgTable("projects", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -55,6 +62,12 @@ export const knowledgeFiles = pgTable("knowledge_files", {
 
 export type AiSettings = typeof aiSettings.$inferSelect;
 export type KnowledgeFile = typeof knowledgeFiles.$inferSelect;
+export type DriveFolder = typeof driveFolders.$inferSelect;
+
+export const insertDriveFolderSchema = createInsertSchema(driveFolders).omit({
+  id: true,
+  createdAt: true,
+});
 
 export const insertProjectSchema = createInsertSchema(projects).omit({
   id: true,

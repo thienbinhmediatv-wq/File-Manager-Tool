@@ -1,6 +1,7 @@
 import { ReplitConnectors } from "@replit/connectors-sdk";
+import { storage } from "./storage";
 
-const BMT_FOLDER_ID = "1bX8XfBMq_l3oFT3edht2RLlddHiYLbaK";
+const DEFAULT_FOLDER_ID = "1bX8XfBMq_l3oFT3edht2RLlddHiYLbaK";
 const connectors = new ReplitConnectors();
 
 interface DriveFile {
@@ -26,19 +27,31 @@ function isTextFile(name: string): boolean {
   return TEXT_EXTENSIONS.some(ext => lower.endsWith(ext));
 }
 
-export async function listDriveFiles(): Promise<DriveFile[]> {
+async function listFilesFromFolder(folderId: string): Promise<DriveFile[]> {
   try {
     const response = await connectors.proxy(
       "google-drive",
-      `/drive/v3/files?q='${BMT_FOLDER_ID}'+in+parents+and+trashed=false&fields=files(id,name,mimeType,size)&pageSize=100`,
+      `/drive/v3/files?q='${folderId}'+in+parents+and+trashed=false&fields=files(id,name,mimeType,size)&pageSize=100`,
       { method: "GET" }
     );
     const data = await response.json() as { files: DriveFile[] };
     return data.files || [];
   } catch (err) {
-    console.error("Drive list files error:", err);
+    console.error(`Drive list files error for folder ${folderId}:`, err);
     return [];
   }
+}
+
+export async function listDriveFiles(): Promise<DriveFile[]> {
+  const folders = await storage.getDriveFolders();
+  const defaultFolder = folders.length === 0 ? [{ id: 0, name: "Default", folderId: DEFAULT_FOLDER_ID, createdAt: new Date() }] : folders;
+  
+  let allFiles: DriveFile[] = [];
+  for (const folder of defaultFolder) {
+    const files = await listFilesFromFolder(folder.folderId);
+    allFiles = allFiles.concat(files);
+  }
+  return allFiles;
 }
 
 async function fetchFileContent(fileId: string): Promise<string> {

@@ -3,10 +3,12 @@ import {
   projects,
   aiSettings,
   knowledgeFiles,
+  driveFolders,
   type Project,
   type InsertProject,
   type AiSettings,
   type KnowledgeFile,
+  type DriveFolder,
 } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -24,6 +26,10 @@ export interface IStorage {
   getKnowledgeFile(id: number): Promise<KnowledgeFile | undefined>;
   createKnowledgeFile(file: { name: string; originalName: string; content: string; fileType: string; fileSize: number }): Promise<KnowledgeFile>;
   deleteKnowledgeFile(id: number): Promise<void>;
+  getDriveFolders(): Promise<DriveFolder[]>;
+  getDriveFolder(id: number): Promise<DriveFolder | undefined>;
+  createDriveFolder(folder: { name: string; folderId: string }): Promise<DriveFolder>;
+  deleteDriveFolder(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -100,6 +106,24 @@ export class DatabaseStorage implements IStorage {
 
   async deleteKnowledgeFile(id: number): Promise<void> {
     await db.delete(knowledgeFiles).where(eq(knowledgeFiles.id, id));
+  }
+
+  async getDriveFolders(): Promise<DriveFolder[]> {
+    return await db.select().from(driveFolders).orderBy(desc(driveFolders.createdAt));
+  }
+
+  async getDriveFolder(id: number): Promise<DriveFolder | undefined> {
+    const [folder] = await db.select().from(driveFolders).where(eq(driveFolders.id, id));
+    return folder;
+  }
+
+  async createDriveFolder(folder: { name: string; folderId: string }): Promise<DriveFolder> {
+    const [created] = await db.insert(driveFolders).values(folder).returning();
+    return created;
+  }
+
+  async deleteDriveFolder(id: number): Promise<void> {
+    await db.delete(driveFolders).where(eq(driveFolders.id, id));
   }
 }
 
