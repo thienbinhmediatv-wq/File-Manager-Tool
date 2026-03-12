@@ -173,6 +173,52 @@ Each step (3-7) has a corresponding Cẩm nang (handbook) stored in `knowledge_f
 
 ## FUTURE FEATURES (TO-DO)
 
+### Architecture: Centralized Knowledge Store ("Bó Nhớ") 
+**Status**: Planning (Architect-approved model)
+**Concept**: Single "Bó Nhớ" (Memory) website serves as centralized knowledge store for unlimited tools. Each tool connects via simple API link, no AI retraining needed.
+
+**Benefits**:
+- ✅ **Lightweight Tools**: Each tool is stateless, no embedded knowledge
+- ✅ **Multi-Tool Support**: Create Tool 2, Tool 3, Tool N — just link to "Bó Nhớ"
+- ✅ **Zero Retraining**: AI knowledge shared across all tools automatically
+- ✅ **Single Update Point**: Change prompts/schemas on website → all tools use immediately
+- ✅ **Infinite Scalability**: Add 100 tools without retraining or duplicating data
+- ✅ **Cost-Efficient**: One website "Bó Nhớ" + many lightweight tool instances
+
+**Architecture Pattern**:
+```
+bmt-bo-nho.com (CENTRALIZED KNOWLEDGE)
+├─ /api/prompts/{step}/{version}
+├─ /api/schemas/
+├─ /api/references/images/{step}
+└─ /api/thinking/
+
+↓ Connected by
+┌────────────────────────────┐
+Tool 1 (BMT Decor)
+Tool 2 (Consulting)
+Tool 3 (CMS)
+Tool N (Future)
+```
+
+**Implementation Pattern (Each Tool)**:
+```typescript
+// config/knowledge-config.ts
+export const BOMemoryUrl = process.env.BO_NHO_URL || "https://bmt-bo-nho.com"
+
+// server/ai-service.ts
+async function getAIContext() {
+  const [prompts, schemas, images] = await Promise.all([
+    fetch(`${BOMemoryUrl}/api/prompts`).then(r => r.json()),
+    fetch(`${BOMemoryUrl}/api/schemas`).then(r => r.json()),
+    fetch(`${BOMemoryUrl}/api/references`).then(r => r.json()),
+  ])
+  return { prompts, schemas, images }
+}
+```
+
+---
+
 ### Feature 1: Continuous Learning from Website
 **Status**: TO-DO (Planning phase)
 **Description**: Tool automatically connects to user's website/blogger to continuously extract and learn from project data. AI extracts architectural rules, design patterns, color schemes, material ratios instead of just copying data.
