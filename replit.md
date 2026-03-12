@@ -175,7 +175,17 @@ Each step (3-7) has a corresponding Cẩm nang (handbook) stored in `knowledge_f
 
 ### Architecture: Centralized Knowledge Store ("Bó Nhớ") 
 **Status**: Planning (Architect-approved model)
-**Concept**: Single "Bó Nhớ" (Memory) website serves as centralized knowledge store for unlimited tools. Each tool connects via simple API link, no AI retraining needed.
+**Concept**: Single website serves as centralized knowledge store + continuous learning system. Can combine Memory (static prompts/schemas) + Learning (dynamic scraping) into one unified website. Each tool connects via simple API link, no AI retraining needed.
+
+**Key Decision**: 1 Website (Combined) vs 2 Websites (Separate)
+- **1 Website (Recommended)**: $5-10/tháng, simplified management, unified API
+  - Module 1: `/api/memory/*` (static, read-only, cacheable)
+  - Module 2: `/api/learning/*` (dynamic, async background jobs)
+  - Shared database: knowledge_base + learning_queue
+- **2 Websites (Alternative)**: $10-20/tháng, separated concerns, simpler logic per site
+  - Website 1: Prompts, schemas, images (static only)
+  - Website 2: Scraper, extractor, updater (dynamic only)
+  - Need API-to-API sync between them
 
 **Benefits**:
 - ✅ **Lightweight Tools**: Each tool is stateless, no embedded knowledge
