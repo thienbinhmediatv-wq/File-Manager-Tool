@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "wouter";
-import { ChevronLeft, Check, Loader2 } from "lucide-react";
+import { ChevronLeft, Check, Camera, Ruler, Layout, Box, Sofa, Image, FileText, MessageCircle, X } from "lucide-react";
 import { useProject, useProcessStep, useApproveStep, useRedoStep, useSubmitStep } from "@/hooks/use-projects";
 import { useChat } from "@/hooks/use-chat";
 import { AIChatPanel } from "@/components/chat/AIChatPanel";
@@ -15,15 +15,16 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { Project } from "@shared/schema";
+import logoImg from "@assets/logo_nobg.png";
 
 const STEPS = [
-  { num: 1, label: "Thu thập", icon: "📋" },
-  { num: 2, label: "Phân tích", icon: "🔍" },
-  { num: 3, label: "CAD", icon: "📐" },
-  { num: 4, label: "3D", icon: "🏠" },
-  { num: 5, label: "Nội thất", icon: "🪑" },
-  { num: 6, label: "Render", icon: "🎨" },
-  { num: 7, label: "PDF", icon: "📄" },
+  { num: 1, label: "Thu thập", shortLabel: "1", icon: Camera },
+  { num: 2, label: "Phân tích", shortLabel: "2", icon: Ruler },
+  { num: 3, label: "CAD", shortLabel: "3", icon: Layout },
+  { num: 4, label: "3D", shortLabel: "4", icon: Box },
+  { num: 5, label: "Nội thất", shortLabel: "5", icon: Sofa },
+  { num: 6, label: "Render", shortLabel: "6", icon: Image },
+  { num: 7, label: "PDF", shortLabel: "7", icon: FileText },
 ];
 
 const STEP_PROMPTS: Record<number, string> = {
@@ -45,6 +46,7 @@ export default function ProjectWizard() {
   const redoStep = useRedoStep();
   const submitStep = useSubmitStep();
   const { messages, isLoading: chatLoading, sendMessage, addSystemMessage, loadHistory } = useChat(projectId);
+  const [showMobileChat, setShowMobileChat] = useState(false);
 
   useEffect(() => {
     if (project && messages.length === 0) {
@@ -55,9 +57,7 @@ export default function ProjectWizard() {
         return;
       }
       const prompt = STEP_PROMPTS[step];
-      if (prompt) {
-        addSystemMessage(prompt);
-      }
+      if (prompt) addSystemMessage(prompt);
     }
   }, [project?.id]);
 
@@ -76,25 +76,13 @@ export default function ProjectWizard() {
 
   const currentStep = project.currentStep;
   const statuses = (project.stepStatuses || {}) as Record<string, string>;
-  const currentStatus = statuses[currentStep] || "pending";
 
   const getStepStatus = (step: number) => statuses[step] || "pending";
 
-  const handleProcess = (step: number) => {
-    processStep.mutate({ projectId, step });
-  };
-
-  const handleApprove = (step: number) => {
-    approveStep.mutate({ projectId, step });
-  };
-
-  const handleRedo = (step: number) => {
-    redoStep.mutate({ projectId, step });
-  };
-
-  const handleSubmit = (step: number, data: Record<string, unknown>) => {
-    submitStep.mutate({ projectId, step, data });
-  };
+  const handleProcess = (step: number) => processStep.mutate({ projectId, step });
+  const handleApprove = (step: number) => approveStep.mutate({ projectId, step });
+  const handleRedo = (step: number) => redoStep.mutate({ projectId, step });
+  const handleSubmit = (step: number, data: Record<string, unknown>) => submitStep.mutate({ projectId, step, data });
 
   const stepProps = (step: number) => ({
     project: project as Project,
@@ -108,44 +96,72 @@ export default function ProjectWizard() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col" data-testid="project-wizard">
-      <header className="h-14 border-b border-border/50 bg-white/80 backdrop-blur px-4 flex items-center gap-4 sticky top-0 z-50">
+      <header className="h-13 border-b border-border/50 bg-white/80 dark:bg-slate-900/80 backdrop-blur px-3 sm:px-5 flex items-center gap-3 sticky top-0 z-50">
         <Link href="/">
-          <Button variant="ghost" size="sm" className="rounded-lg gap-1.5" data-testid="button-back">
-            <ChevronLeft className="w-4 h-4" /> Dashboard
+          <Button variant="ghost" size="sm" className="rounded-lg gap-1.5 text-muted-foreground hover:text-foreground" data-testid="button-back">
+            <ChevronLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Dashboard</span>
           </Button>
         </Link>
-        <div className="flex-1">
-          <h1 className="font-bold text-foreground text-sm" data-testid="text-project-title">{project.title}</h1>
-          {project.clientName && <p className="text-xs text-muted-foreground">KH: {project.clientName}</p>}
+
+        <div className="flex items-center gap-2 mr-1">
+          <img src={logoImg} alt="BMT" className="w-6 h-6 object-contain opacity-80" />
         </div>
+
+        <div className="flex-1 min-w-0">
+          <h1 className="font-bold text-foreground text-sm truncate" data-testid="text-project-title">{project.title}</h1>
+          {project.clientName && <p className="text-xs text-muted-foreground truncate">👤 {project.clientName}</p>}
+        </div>
+
         {project.status === "completed" && (
-          <span className="bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full" data-testid="badge-completed">Hoàn thành</span>
+          <span className="bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap" data-testid="badge-completed">
+            ✓ Hoàn thành
+          </span>
         )}
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="md:hidden rounded-lg gap-1.5 border-primary/30 text-primary"
+          onClick={() => setShowMobileChat(true)}
+          data-testid="button-open-chat"
+        >
+          <MessageCircle className="w-4 h-4" />
+          Chat
+        </Button>
       </header>
 
-      <div className="px-4 py-3 bg-white/60 border-b border-border/30">
-        <div className="flex items-center gap-1 max-w-4xl mx-auto">
+      <div className="px-3 sm:px-5 py-2.5 bg-white/60 dark:bg-slate-900/60 border-b border-border/30 overflow-x-auto">
+        <div className="flex items-center min-w-max sm:min-w-0 gap-0.5 max-w-3xl mx-auto">
           {STEPS.map((step, i) => {
             const status = getStepStatus(step.num);
             const isCurrent = step.num === currentStep;
             const isCompleted = status === "approved";
             const isAccessible = step.num <= currentStep;
+            const StepIcon = step.icon;
 
             return (
-              <div key={step.num} className="flex items-center flex-1">
+              <div key={step.num} className="flex items-center">
                 <div className={cn(
-                  "flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-all w-full justify-center",
+                  "flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap",
                   isCurrent && "bg-primary text-white shadow-md shadow-primary/25",
-                  isCompleted && !isCurrent && "bg-green-100 text-green-700",
-                  !isCurrent && !isCompleted && isAccessible && "bg-slate-100 text-slate-600",
-                  !isAccessible && "bg-slate-50 text-slate-400"
+                  isCompleted && !isCurrent && "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300",
+                  !isCurrent && !isCompleted && isAccessible && "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400",
+                  !isAccessible && "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500"
                 )} data-testid={`stepper-step-${step.num}`}>
-                  {isCompleted ? <Check className="w-3.5 h-3.5" /> : <span>{step.icon}</span>}
-                  <span className="hidden lg:inline">{step.label}</span>
-                  <span className="lg:hidden">{step.num}</span>
+                  {isCompleted ? (
+                    <Check className="w-3.5 h-3.5 shrink-0" />
+                  ) : (
+                    <StepIcon className="w-3.5 h-3.5 shrink-0" />
+                  )}
+                  <span className="hidden sm:inline">{step.label}</span>
+                  <span className="sm:hidden">{step.shortLabel}</span>
                 </div>
                 {i < STEPS.length - 1 && (
-                  <div className={cn("h-0.5 w-4 shrink-0 mx-0.5", isCompleted ? "bg-green-300" : "bg-slate-200")} />
+                  <div className={cn(
+                    "h-0.5 w-3 sm:w-4 shrink-0 mx-0.5 rounded-full",
+                    isCompleted ? "bg-green-400 dark:bg-green-600" : isCurrent ? "bg-primary/40" : "bg-slate-200 dark:bg-slate-700"
+                  )} />
                 )}
               </div>
             );
@@ -154,7 +170,7 @@ export default function ProjectWizard() {
       </div>
 
       <div className="flex-1 flex min-h-0">
-        <div className="flex-1 overflow-y-auto p-6" style={{ flex: "0 0 60%" }}>
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6" style={{ flex: "0 0 60%" }}>
           {currentStep === 1 && <Step1DataCollection {...stepProps(1)} onSubmit={(data) => handleSubmit(1, data)} />}
           {currentStep === 2 && <Step2Analysis {...stepProps(2)} />}
           {currentStep === 3 && <Step3CAD {...stepProps(3)} />}
@@ -164,14 +180,15 @@ export default function ProjectWizard() {
           {currentStep === 7 && <Step7PDF {...stepProps(7)} />}
 
           {project.status === "completed" && currentStep >= 7 && getStepStatus(7) === "approved" && (
-            <div className="mt-6 bg-green-50 border border-green-200 rounded-2xl p-6 text-center">
-              <h2 className="text-xl font-bold text-green-700 mb-2">Dự án hoàn thành!</h2>
-              <p className="text-green-600">Tất cả 7 bước đã được duyệt. Hồ sơ PDF đã sẵn sàng tải xuống.</p>
+            <div className="mt-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-2xl p-6 text-center">
+              <div className="text-4xl mb-3">🎉</div>
+              <h2 className="text-xl font-bold text-green-700 dark:text-green-300 mb-2">Dự án hoàn thành!</h2>
+              <p className="text-green-600 dark:text-green-400">Tất cả 7 bước đã được duyệt. Hồ sơ PDF đã sẵn sàng tải xuống.</p>
             </div>
           )}
         </div>
 
-        <div className="border-l border-border/50 flex flex-col" style={{ flex: "0 0 40%" }}>
+        <div className="border-l border-border/50 flex-col hidden md:flex" style={{ flex: "0 0 40%" }}>
           <AIChatPanel
             messages={messages}
             isLoading={chatLoading}
@@ -179,6 +196,27 @@ export default function ProjectWizard() {
           />
         </div>
       </div>
+
+      {showMobileChat && (
+        <div className="fixed inset-0 z-50 md:hidden flex flex-col bg-background">
+          <div className="h-13 border-b border-border/50 px-4 flex items-center justify-between bg-white/80 dark:bg-slate-900/80 backdrop-blur">
+            <div className="flex items-center gap-2">
+              <MessageCircle className="w-5 h-5 text-primary" />
+              <span className="font-semibold text-sm">AI Trợ lý thiết kế</span>
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => setShowMobileChat(false)} className="rounded-lg">
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
+          <div className="flex-1 min-h-0">
+            <AIChatPanel
+              messages={messages}
+              isLoading={chatLoading}
+              onSendMessage={(msg) => { sendMessage(msg, currentStep); }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

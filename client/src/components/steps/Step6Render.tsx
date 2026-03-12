@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { StepWrapper } from "./StepWrapper";
+import { StepWrapper, ImageGallery } from "./StepWrapper";
 import type { Project } from "@shared/schema";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -105,41 +105,38 @@ export function Step6Render({ project, stepStatus, onProcess, onApprove, onRedo,
             <h3 className="font-semibold flex items-center gap-2">
               <Image className="w-4 h-4 text-primary" /> Render phối cảnh (AI Generated)
             </h3>
-            <div className="space-y-4">
+            <ImageGallery images={result.renders.map(r => ({ url: r.url, label: r.name }))} />
+
+            <div className="space-y-2" data-testid="render-video-controls">
               {result.renders.map((r, i) => (
-                <div key={i} className="rounded-xl overflow-hidden border border-border/50" data-testid={`render-image-${i}`}>
-                  <img src={r.url} alt={r.name} className="w-full object-contain" />
-                  <div className="p-3 bg-slate-50 flex items-center justify-between">
-                    <p className="font-semibold text-sm">{r.name}</p>
-                    <div className="flex items-center gap-2">
-                      {videoJobs[r.name]?.status === "success" && videoJobs[r.name]?.output ? (
-                        <a href={videoJobs[r.name].output} target="_blank" rel="noopener noreferrer">
-                          <Button size="sm" variant="outline" className="rounded-lg gap-1.5 text-xs" data-testid={`button-view-video-${i}`}>
-                            <Video className="w-3.5 h-3.5 text-green-600" /> Xem Video
-                          </Button>
-                        </a>
-                      ) : videoJobs[r.name]?.status === "pending" || videoJobs[r.name]?.status === "processing" ? (
-                        <Button size="sm" variant="outline" className="rounded-lg gap-1.5 text-xs" disabled>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang tạo video...
-                        </Button>
+                <div key={i} className="flex items-center justify-between p-2.5 rounded-xl border border-border/50 bg-muted/30">
+                  <p className="text-sm font-medium truncate flex-1">{r.name}</p>
+                  {videoJobs[r.name]?.status === "success" && videoJobs[r.name]?.output ? (
+                    <a href={videoJobs[r.name].output} target="_blank" rel="noopener noreferrer">
+                      <Button size="sm" variant="outline" className="rounded-lg gap-1.5 text-xs shrink-0" data-testid={`button-view-video-${i}`}>
+                        <Video className="w-3.5 h-3.5 text-green-600" /> Xem Video
+                      </Button>
+                    </a>
+                  ) : videoJobs[r.name]?.status === "pending" || videoJobs[r.name]?.status === "processing" ? (
+                    <Button size="sm" variant="outline" className="rounded-lg gap-1.5 text-xs shrink-0" disabled>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang tạo...
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-lg gap-1.5 text-xs shrink-0"
+                      onClick={() => handleGenerateVideo(r.name, r.url)}
+                      disabled={generatingVideo === r.name}
+                      data-testid={`button-generate-video-${i}`}
+                    >
+                      {generatingVideo === r.name ? (
+                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Gửi...</>
                       ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="rounded-lg gap-1.5 text-xs"
-                          onClick={() => handleGenerateVideo(r.name, r.url)}
-                          disabled={generatingVideo === r.name}
-                          data-testid={`button-generate-video-${i}`}
-                        >
-                          {generatingVideo === r.name ? (
-                            <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Gửi...</>
-                          ) : (
-                            <><Video className="w-3.5 h-3.5" /> Tạo Video</>
-                          )}
-                        </Button>
+                        <><Video className="w-3.5 h-3.5" /> Tạo Video</>
                       )}
-                    </div>
-                  </div>
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>

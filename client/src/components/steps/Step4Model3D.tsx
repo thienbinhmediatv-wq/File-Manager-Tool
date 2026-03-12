@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { StepWrapper } from "./StepWrapper";
+import { StepWrapper, ImageGallery } from "./StepWrapper";
 import type { Project } from "@shared/schema";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -51,17 +51,11 @@ export function Step4Model3D({ project, stepStatus, onProcess, onApprove, onRedo
             <h3 className="font-semibold flex items-center gap-2">
               <Box className="w-4 h-4 text-primary" /> Mặt tiền (AI Generated)
             </h3>
-            {result.facadeImages && (
-              <div className="grid grid-cols-1 gap-3">
-                {result.facadeImages.map((url, i) => (
-                  <div key={i} className="rounded-xl overflow-hidden border border-border/50" data-testid={`facade-image-${i}`}>
-                    <img src={url} alt={`Mặt tiền ${i + 1}`} className="w-full object-contain" />
-                  </div>
-                ))}
-              </div>
+            {result.facadeImages && result.facadeImages.length > 0 && (
+              <ImageGallery images={result.facadeImages.map((url, i) => ({ url, label: `Mặt tiền ${i + 1}` }))} />
             )}
             {result.designDescription && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm whitespace-pre-wrap max-h-64 overflow-y-auto">
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl p-4 text-sm whitespace-pre-wrap max-h-64 overflow-y-auto">
                 {result.designDescription}
               </div>
             )}

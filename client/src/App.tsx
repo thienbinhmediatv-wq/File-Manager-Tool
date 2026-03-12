@@ -8,6 +8,7 @@ import Dashboard from "@/pages/Dashboard";
 import ProjectWizard from "@/pages/ProjectWizard";
 import Settings from "@/pages/Settings";
 import Guide from "@/pages/Guide";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 
 function Router() {
   return (
@@ -24,12 +25,14 @@ function Router() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Router />
-      </TooltipProvider>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }
 

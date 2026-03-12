@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Save, Upload, Trash2, FileText, Brain, CreditCard, Loader2, AlertCircle, Lock, Eye, EyeOff, FolderSync, CheckCircle, XCircle, Database, BookOpen, Link as LinkIcon } from "lucide-react";
@@ -182,198 +183,184 @@ export default function Settings() {
 
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto space-y-6" data-testid="page-settings">
-        <div>
+      <div className="max-w-4xl mx-auto" data-testid="page-settings">
+        <div className="mb-6">
           <h1 className="text-2xl font-bold text-foreground" data-testid="text-settings-title">Cài đặt</h1>
           <p className="text-muted-foreground mt-1">Quản lý AI Instructions và file tri thức</p>
         </div>
 
-        <Card className="border-border/50">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center">
-                <LinkIcon className="w-5 h-5 text-orange-500" />
-              </div>
-              <div>
-                <CardTitle>Học từ Drive Links</CardTitle>
-                <CardDescription>Paste Drive link để AI tham khảo trực tiếp</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <DriveLinksLearner />
-          </CardContent>
-        </Card>
+        <Tabs defaultValue="knowledge" className="space-y-5">
+          <TabsList className="bg-muted/60 dark:bg-muted/30 p-1 rounded-xl h-auto gap-1">
+            <TabsTrigger value="knowledge" className="rounded-lg gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-sm" data-testid="tab-knowledge">
+              <Database className="w-4 h-4" />
+              <span className="hidden sm:inline">Kho Tri Thức</span>
+              <span className="sm:hidden">Tri Thức</span>
+            </TabsTrigger>
+            <TabsTrigger value="ai" className="rounded-lg gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-sm" data-testid="tab-ai">
+              <Brain className="w-4 h-4" />
+              <span className="hidden sm:inline">AI Settings</span>
+              <span className="sm:hidden">AI</span>
+            </TabsTrigger>
+            <TabsTrigger value="payment" className="rounded-lg gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-sm" data-testid="tab-payment">
+              <CreditCard className="w-4 h-4" />
+              <span className="hidden sm:inline">Thanh Toán</span>
+              <span className="sm:hidden">Thanh Toán</span>
+            </TabsTrigger>
+          </TabsList>
 
-        <Card className="border-border/50">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <BookOpen className="w-5 h-5 text-blue-500" />
-              </div>
-              <div>
-                <CardTitle>Thư viện Mẫu</CardTitle>
-                <CardDescription>Học từ các mẫu thiết kế trong Drive</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <TemplatesComponent />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Brain className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <CardTitle>AI Instructions</CardTitle>
-                <CardDescription>
-                  Hướng dẫn tùy chỉnh cho AI. Nội dung này sẽ được thêm vào mọi cuộc hội thoại AI.
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Textarea
-              value={instructions}
-              onChange={(e) => setInstructions(e.target.value)}
-              placeholder="Ví dụ: Luôn trả lời bằng tiếng Việt. Ưu tiên phong cách hiện đại minimalist. Dự toán chi phí theo giá thị trường TP.HCM năm 2024-2025..."
-              className="min-h-[200px] resize-y"
-              data-testid="input-instructions"
-            />
-            <div className="flex justify-between items-center">
-              <p className="text-xs text-muted-foreground">
-                {instructions.length} ký tự
-              </p>
-              <Button
-                onClick={() => saveMutation.mutate(instructions)}
-                disabled={saveMutation.isPending}
-                data-testid="button-save-instructions"
-              >
-                {saveMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4 mr-2" />
-                )}
-                Lưu Instructions
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-blue-500" />
-                </div>
-                <div>
-                  <CardTitle>File tri thức</CardTitle>
-                  <CardDescription>
-                    Upload file văn bản để AI tham khảo khi xử lý. Hỗ trợ .txt, .md, .csv, .json (tối đa 5MB)
-                  </CardDescription>
-                </div>
-              </div>
-              <Button
-                onClick={handleFileUpload}
-                disabled={uploadMutation.isPending}
-                variant="outline"
-                data-testid="button-upload-knowledge"
-              >
-                {uploadMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Upload className="w-4 h-4 mr-2" />
-                )}
-                Tải file lên
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {filesQuery.isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : !filesQuery.data || filesQuery.data.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                <p>Chưa có file tri thức nào</p>
-                <p className="text-sm mt-1">Upload file văn bản (.txt, .md, .csv, .json) để AI có thêm dữ liệu tham khảo</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {filesQuery.data.map((file) => (
-                  <div
-                    key={file.id}
-                    className="flex items-center justify-between p-3 rounded-lg border border-border/50 hover:bg-muted/50 transition-colors"
-                    data-testid={`row-knowledge-file-${file.id}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <FileText className="w-5 h-5 text-blue-500" />
-                      <div>
-                        <p className="text-sm font-medium">{file.originalName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {file.fileType} • {formatFileSize(file.fileSize)} • {new Date(file.createdAt).toLocaleDateString("vi-VN")}
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteMutation.mutate(file.id)}
-                      disabled={deleteMutation.isPending}
-                      data-testid={`button-delete-file-${file.id}`}
-                    >
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
+          <TabsContent value="knowledge" className="space-y-5 mt-0">
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
+                    <LinkIcon className="w-4 h-4 text-orange-500" />
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  <div>
+                    <CardTitle className="text-base">Học từ Drive Links</CardTitle>
+                    <CardDescription className="text-xs">Paste Drive link để AI tham khảo trực tiếp</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <DriveLinksLearner />
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center">
-                <Database className="w-5 h-5 text-orange-500" />
-              </div>
-              <div>
-                <CardTitle>Xử lý tri thức từ Drive (OCR)</CardTitle>
-                <CardDescription>
-                  Trích xuất text từ PDF, DOCX, hình ảnh trong Google Drive → lưu vào kho tri thức AI
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <DriveOcrProcessor />
-          </CardContent>
-        </Card>
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                    <BookOpen className="w-4 h-4 text-blue-500" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Thư viện Mẫu</CardTitle>
+                    <CardDescription className="text-xs">Học từ các mẫu thiết kế trong Drive</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <TemplatesComponent />
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-                <CreditCard className="w-5 h-5 text-green-500" />
-              </div>
-              <div>
-                <CardTitle>Thanh toán</CardTitle>
-                <CardDescription>
-                  Quản lý gói dịch vụ và thanh toán qua Stripe
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <StripeProducts />
-          </CardContent>
-        </Card>
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <Database className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Xử lý tri thức từ Drive (OCR)</CardTitle>
+                    <CardDescription className="text-xs">Trích xuất text từ PDF, DOCX trong Google Drive → lưu vào kho tri thức AI</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <DriveOcrProcessor />
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                      <FileText className="w-4 h-4 text-blue-500" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">File tri thức</CardTitle>
+                      <CardDescription className="text-xs">Upload file văn bản để AI tham khảo. Hỗ trợ .txt, .md, .csv, .json (tối đa 5MB)</CardDescription>
+                    </div>
+                  </div>
+                  <Button onClick={handleFileUpload} disabled={uploadMutation.isPending} variant="outline" size="sm" data-testid="button-upload-knowledge">
+                    {uploadMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    <span className="ml-1.5 hidden sm:inline">Tải lên</span>
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {filesQuery.isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : !filesQuery.data || filesQuery.data.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm">Chưa có file tri thức nào</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {filesQuery.data.map((file) => (
+                      <div key={file.id} className="flex items-center justify-between p-2.5 rounded-lg border border-border/50 hover:bg-muted/50 transition-colors" data-testid={`row-knowledge-file-${file.id}`}>
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium truncate">{file.originalName}</p>
+                            <p className="text-xs text-muted-foreground">{file.fileType} • {formatFileSize(file.fileSize)} • {new Date(file.createdAt).toLocaleDateString("vi-VN")}</p>
+                          </div>
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(file.id)} disabled={deleteMutation.isPending} className="h-7 w-7 shrink-0" data-testid={`button-delete-file-${file.id}`}>
+                          <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="ai" className="space-y-5 mt-0">
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <Brain className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">AI Instructions</CardTitle>
+                    <CardDescription className="text-xs">Hướng dẫn tùy chỉnh cho AI. Nội dung này sẽ được thêm vào mọi cuộc hội thoại AI.</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Textarea
+                  value={instructions}
+                  onChange={(e) => setInstructions(e.target.value)}
+                  placeholder="Ví dụ: Luôn trả lời bằng tiếng Việt. Ưu tiên phong cách hiện đại minimalist. Dự toán chi phí theo giá thị trường TP.HCM năm 2024-2025..."
+                  className="min-h-[250px] resize-y text-sm"
+                  data-testid="input-instructions"
+                />
+                <div className="flex justify-between items-center">
+                  <p className="text-xs text-muted-foreground">{instructions.length} ký tự</p>
+                  <Button onClick={() => saveMutation.mutate(instructions)} disabled={saveMutation.isPending} data-testid="button-save-instructions">
+                    {saveMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                    Lưu Instructions
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="payment" className="space-y-5 mt-0">
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
+                    <CreditCard className="w-4 h-4 text-green-500" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Thanh toán</CardTitle>
+                    <CardDescription className="text-xs">Quản lý gói dịch vụ và thanh toán qua Stripe</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <StripeProducts />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </AppLayout>
   );

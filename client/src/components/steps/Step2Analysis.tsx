@@ -34,17 +34,17 @@ export function Step2Analysis({ project, stepStatus, onProcess, onApprove, onRed
                 <Sparkles className="w-4 h-4 text-primary" /> Kết quả phân tích AI
               </h3>
               <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="bg-slate-50 rounded-xl p-3">
+                <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3">
                   <span className="text-xs text-muted-foreground">Kích thước</span>
                   <p className="text-sm font-semibold">{analysis.dimensions}</p>
                 </div>
-                <div className="bg-slate-50 rounded-xl p-3">
+                <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3">
                   <span className="text-xs text-muted-foreground">Diện tích</span>
                   <p className="text-sm font-semibold">{analysis.area}</p>
                 </div>
               </div>
               {analysis.aiAnalysis && (
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm whitespace-pre-wrap max-h-80 overflow-y-auto" data-testid="text-ai-analysis">
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl p-4 text-sm whitespace-pre-wrap max-h-80 overflow-y-auto" data-testid="text-ai-analysis">
                   {analysis.aiAnalysis}
                 </div>
               )}
@@ -84,7 +84,7 @@ export function Step2Analysis({ project, stepStatus, onProcess, onApprove, onRed
             AI sẽ phân tích: hướng nhà, ánh sáng tự nhiên, thông gió, phong thủy sơ bộ. Sau đó tự động tạo bố trí layout phòng cho {project.floors} tầng.
           </p>
         </div>
-        <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-sm">
+        <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 space-y-2 text-sm">
           <p><strong>Kích thước:</strong> {project.landWidth}m x {project.landLength}m ({project.landWidth * project.landLength} m²)</p>
           <p><strong>Tầng:</strong> {project.floors} | <strong>Phòng ngủ:</strong> {project.bedrooms}</p>
           <p><strong>Phong cách:</strong> {project.style}</p>

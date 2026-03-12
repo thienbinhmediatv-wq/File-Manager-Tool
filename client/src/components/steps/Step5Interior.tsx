@@ -60,7 +60,7 @@ export function Step5Interior({ project, stepStatus, onProcess, onApprove, onRed
                 {result.interiorImages.map((img, i) => (
                   <div key={i} className="rounded-xl overflow-hidden border border-border/50">
                     <img src={img.url} alt={img.name} className="w-full object-contain" />
-                    <div className="p-2 bg-slate-50 text-center">
+                    <div className="p-2 bg-slate-50 dark:bg-slate-800 text-center">
                       <p className="text-sm font-semibold">{img.name}</p>
                     </div>
                   </div>
@@ -69,7 +69,7 @@ export function Step5Interior({ project, stepStatus, onProcess, onApprove, onRed
             )}
 
             {result.interiorDescription && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm whitespace-pre-wrap max-h-80 overflow-y-auto">
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl p-4 text-sm whitespace-pre-wrap max-h-80 overflow-y-auto">
                 {result.interiorDescription}
               </div>
             )}
@@ -100,7 +100,7 @@ export function Step5Interior({ project, stepStatus, onProcess, onApprove, onRed
           <Label className="font-semibold mb-3 block">Vật liệu ưa thích</Label>
           <div className="grid grid-cols-3 gap-3">
             {MATERIALS.map(m => (
-              <label key={m.id} className="flex items-center gap-2 p-3 rounded-xl border border-border/50 hover:bg-slate-50 cursor-pointer" data-testid={`checkbox-material-${m.id}`}>
+              <label key={m.id} className="flex items-center gap-2 p-3 rounded-xl border border-border/50 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer" data-testid={`checkbox-material-${m.id}`}>
                 <Checkbox
                   checked={selectedMaterials[m.id] || false}
                   onCheckedChange={() => setSelectedMaterials(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
