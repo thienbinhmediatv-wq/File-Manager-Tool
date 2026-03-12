@@ -139,10 +139,13 @@ Each step (3-7) has a corresponding Cẩm nang (handbook) stored in `knowledge_f
 - pdf-parse uses `createRequire` (CJS) to avoid ESM path resolution issues in tsx
 - AI chat auto-detects Drive links in messages and fetches file content
 
-## External APIs
-- **SerpAPI** (`SERPAPI_KEY`): Google search for design references
-- **Artificial Studio** (`ARTIFICIAL_STUDIO_API_KEY`): Image-to-video generation
-- **PDF Generator API**: Template-based PDF generation (fallback to PDFKit)
+## External APIs (Currently Used)
+- **OpenAI** (gpt-5.1, gpt-audio, DALL-E) - Chat, audio transcription, image generation — ~$5-10/tháng
+- **SerpAPI** - Google search for design references — ~$5-20/tháng
+- **Artificial Studio** - Image-to-video generation — ~$10-30/tháng
+- **PDF Generator API** - Template-based PDF generation (fallback to PDFKit) — ~$5-20/tháng
+- **Google APIs** (Drive, Sheets, Vision) - Free tier (100K requests/ngày) — $0
+- **TOTAL API COST**: ~$25-80/tháng
 
 ## Email Integration
 - 2 Gmail senders with fallback: thienbinhmedia.tv@gmail.com → thuyndp.data2@gmail.com
@@ -165,3 +168,84 @@ Each step (3-7) has a corresponding Cẩm nang (handbook) stored in `knowledge_f
 - `GMAIL_APP_PASSWORD` / `GMAIL_APP_PASSWORD_2` - Gmail App Passwords
 - `SETTINGS_PASSWORD` - Password for Settings page access
 - Stripe credentials managed via Replit Connectors (auto-injected)
+
+---
+
+## FUTURE FEATURES (TO-DO)
+
+### Feature 1: Continuous Learning from Website
+**Status**: TO-DO (Planning phase)
+**Description**: Tool automatically connects to user's website/blogger to continuously extract and learn from project data. AI extracts architectural rules, design patterns, color schemes, material ratios instead of just copying data.
+
+**Implementation Requirements**:
+- Web scraper/API client to fetch projects and templates from website
+- Data extraction logic to parse architectural rules, ratios, color schemes from project data
+- Scheduled background jobs (Cloud Tasks) to sync every 6-24 hours
+- Database schema updates to track extracted knowledge and prevent duplicates
+- Settings UI to configure website URL, sync frequency, and enable/disable
+
+**Website Architecture for Optimal Learning**:
+- API endpoints: `/api/projects` (list), `/api/projects/:id` (detail), `/api/templates` (designs)
+- JSON response format with standardized fields: style, color_palette, materials, spatial_ratios, typical_dimensions
+- Color palette using HEX codes (#ffffff, #333333)
+- Dimensions using metric system (meters, centimeters)
+- Metadata consistency (avoid nested JSON >3-4 levels)
+
+**API Integration Points**:
+- Tool will call website API to fetch: project list, project details, template design patterns
+- Extract from JSON: style (Neoclassic, Modern, Wabi Sabi), color schemes, materials, architectural rules
+- Store extracted insights in knowledge_files table for AI to reference
+
+**Cost Estimation**:
+- Web scraping: $0 (HTTP requests to custom website are free)
+- Data processing via OpenAI: $6-7/tháng (or $0.50-1.50 with Google API)
+- Google Cloud Run (if migrated): $0.02/tháng (batch processing)
+- **Total**: $7-8/tháng (minimal)
+
+**Alternative - Auto-sync Drive Folder** (simpler version):
+- Background job periodically scans a fixed Drive folder
+- OCRs new files automatically
+- Updates knowledge base without user action
+- Cost: Same as above ($0.50-1/tháng with Google API)
+
+---
+
+### Feature 2: API Optimization - Switch to Google APIs
+**Status**: TO-DO (Decision pending)
+**Description**: Evaluate switching from OpenAI to Google Gemini/Vision APIs to reduce costs
+
+**Current API Usage**:
+- OpenAI: gpt-5.1 (chat), DALL-E (images), gpt-audio (audio) — ~$5-10/tháng
+- SerpAPI: Web search — ~$5-20/tháng
+- Artificial Studio: Video generation — ~$10-30/tháng
+- PDF Generator: PDF export — ~$5-20/tháng
+- **TOTAL**: ~$25-80/tháng
+
+**Google Alternative Costs**:
+- Google Vision (OCR): $0.0015/image instead of $0.01 (6-7x cheaper)
+- Google Gemini (chat): $0.000125/1K tokens instead of $0.0001 (similar)
+- Google Vertex AI: $0.50-1.50/tháng for full processing
+- **Potential Savings**: 20-30% reduction
+
+**Decision**: Pending user choice (currently using OpenAI)
+
+---
+
+### Knowledge Management Strategy (Current & Future)
+**Current Approach** (Phase 1 - Now):
+- Manual upload via Settings → Knowledge Base
+- Upload JSON, Markdown, CSV files
+- Cost: $0
+- Method: Settings Upload (Trực Tiếp)
+
+**Future Approach** (Phase 2 - 6-12 months):
+- Automatic website/blogger sync
+- Continuous learning from live projects
+- Cost: $7-15/tháng (depending on volume)
+- Method: Website Kết Nối (Auto)
+
+**Hybrid Approach** (Phase 3 - 1+ year):
+- Website auto-sync for continuous updates
+- Manual Settings upload for fine-tuning/special knowledge
+- AI learning "sống" (live) + "chuẩn xác" (accurate)
+- Cost: $7-15/tháng
