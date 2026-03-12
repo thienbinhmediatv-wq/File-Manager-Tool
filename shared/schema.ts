@@ -24,7 +24,7 @@ export const projects = pgTable("projects", {
   budget: integer("budget").notNull(),
   currentStep: integer("current_step").notNull().default(1),
   stepStatuses: json("step_statuses").$type<Record<string, string>>().default({
-    "1": "pending", "2": "pending", "3": "pending",
+    "1": "approved", "2": "pending", "3": "pending",
     "4": "pending", "5": "pending", "6": "pending", "7": "pending"
   }),
   uploadedFiles: json("uploaded_files").$type<Array<{ name: string; type: string; url: string }>>().default([]),
