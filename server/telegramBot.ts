@@ -269,18 +269,20 @@ export function startTelegramBot() {
     const userId = ctx.from?.id;
     if (!userId) return;
 
-    if (!isAdminUnlocked(userId)) {
+    const doc = ctx.message.document;
+    const fileName = doc.file_name || "unknown";
+    const isAdminMode = isAdminUnlocked(userId);
+
+    if (!isAdminMode) {
       await ctx.reply(
-        `🔒 *Tính năng upload bị khóa!*\n\n` +
-        `Bạn cần gõ lệnh `/unlock <password>` trước khi upload.\n\n` +
-        `_Chỉ admin mới có thể unlock._`,
+        `🔐 *File sẽ không được lưu vào kho tri thức*\n\n` +
+        `Bạn chưa unlock admin mode. Chỉ có thể trò chuyện được.\n\n` +
+        `Gõ \`/unlock <password>\` để có quyền cập nhật tri thức.`,
         { parse_mode: "Markdown" }
       );
       return;
     }
 
-    const doc = ctx.message.document;
-    const fileName = doc.file_name || "unknown";
     const fileExt = "." + fileName.split(".").pop()?.toLowerCase();
 
     if (!ALLOWED_EXTENSIONS.includes(fileExt)) {
@@ -298,7 +300,7 @@ export function startTelegramBot() {
       return;
     }
 
-    const processingMsg = await ctx.reply(`⏳ Đang xử lý file *${fileName}*...`, { parse_mode: "Markdown" });
+    await ctx.reply(`⏳ Đang xử lý file *${fileName}*...`, { parse_mode: "Markdown" });
 
     try {
       const content = await downloadTelegramFile(doc.file_id);
