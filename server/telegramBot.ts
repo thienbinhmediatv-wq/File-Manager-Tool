@@ -12,6 +12,8 @@ const openai = new OpenAI({
 });
 
 const MAX_KNOWLEDGE_CHARS = 12000;
+const ALLOWED_EXTENSIONS = [".md", ".txt", ".json", ".csv"];
+
 const userSessions: Map<number, { messages: { role: string; content: string }[] }> = new Map();
 
 async function buildSystemPrompt(): Promise<string> {
@@ -37,23 +39,20 @@ async function buildSystemPrompt(): Promise<string> {
 
   const customInstructions = aiSettings?.instructions || "";
 
-  return `Bạn là trợ lý AI của BMT Decor - công ty thiết kế kiến trúc & nội thất hàng đầu tại TP.HCM.
+  return `Bạn là trợ lý AI của BMT Decor - công ty thiết kế kiến trúc & nội thất tại TP.HCM.
 Công ty: CÔNG TY TNHH TMDV BMT DECOR
 Địa chỉ: 7/92 Thành Thái, P.14, Q.10, TP.HCM
-Giám đốc: Võ Quốc Bảo
-Website: thicongtramsac.vn
+Giám đốc: Võ Quốc Bảo | Website: thicongtramsac.vn
 
-Bạn đang hỗ trợ qua Telegram bot. Hãy trả lời ngắn gọn, rõ ràng, phù hợp với chat.
-Chuyên môn: thiết kế kiến trúc, nội thất, xây dựng, vật liệu, phong thủy, phối cảnh.
+${customInstructions ? `=== Hướng dẫn AI BMT Decor ===\n${customInstructions}\n` : ""}
+${knowledgeContext ? `=== Kho tri thức BMT Decor ===\n${knowledgeContext}\n` : ""}
 
-${customInstructions ? `\n=== Hướng dẫn riêng BMT Decor ===\n${customInstructions}\n` : ""}
-${knowledgeContext ? `\n=== Kho tri thức BMT Decor ===\n${knowledgeContext}\n` : ""}
-
-Quy tắc:
-- Trả lời bằng tiếng Việt
-- Câu trả lời ngắn gọn (tối đa 500 từ cho Telegram)
-- Nếu câu hỏi ngoài chuyên môn, nhắc người dùng liên hệ trực tiếp
-- Luôn chuyên nghiệp và nhiệt tình`;
+Quy tắc khi trả lời qua Telegram:
+- Ngôn ngữ: Tiếng Việt
+- Ngắn gọn, súc tích (tối đa 400 từ)
+- Dùng emoji phù hợp để dễ đọc
+- Chuyên môn: kiến trúc, nội thất, vật liệu, phong thủy, xây dựng
+- Nếu ngoài chuyên môn → nhắc liên hệ trực tiếp BMT Decor`;
 }
 
 async function askAI(userId: number, userMessage: string): Promise<string> {
@@ -62,16 +61,13 @@ async function askAI(userId: number, userMessage: string): Promise<string> {
   }
 
   const session = userSessions.get(userId)!;
-
   if (session.messages.length > 20) {
     session.messages = session.messages.slice(-16);
   }
-
   session.messages.push({ role: "user", content: userMessage });
 
   try {
     const systemPrompt = await buildSystemPrompt();
-
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -84,17 +80,37 @@ async function askAI(userId: number, userMessage: string): Promise<string> {
 
     const reply = response.choices[0]?.message?.content || "Xin lỗi, tôi không thể trả lời lúc này.";
     session.messages.push({ role: "assistant", content: reply });
-
     return reply;
   } catch (error: any) {
     console.error("[TelegramBot] AI error:", error.message);
-    return "⚠️ Có lỗi xảy ra khi kết nối AI. Vui lòng thử lại sau.";
+    return "⚠️ Có lỗi kết nối AI. Vui lòng thử lại sau.";
+  }
+}
+
+async function downloadTelegramFile(fileId: string): Promise<string | null> {
+  try {
+    const fileInfoRes = await fetch(
+      `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`
+    );
+    const fileInfo = await fileInfoRes.json() as any;
+    if (!fileInfo.ok || !fileInfo.result?.file_path) return null;
+
+    const filePath = fileInfo.result.file_path;
+    const fileRes = await fetch(
+      `https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`
+    );
+    if (!fileRes.ok) return null;
+
+    return await fileRes.text();
+  } catch (err: any) {
+    console.error("[TelegramBot] Download error:", err.message);
+    return null;
   }
 }
 
 export function startTelegramBot() {
   if (!BOT_TOKEN) {
-    console.log("[TelegramBot] No TELEGRAM_BOT_TOKEN, skipping bot start");
+    console.log("[TelegramBot] No TELEGRAM_BOT_TOKEN, skipping");
     return;
   }
 
@@ -104,31 +120,34 @@ export function startTelegramBot() {
     const name = ctx.from?.first_name || "bạn";
     await ctx.reply(
       `👋 Xin chào *${name}*! Tôi là trợ lý AI của *BMT Decor*.\n\n` +
-      `🏠 Tôi có thể giúp bạn:\n` +
+      `🏠 Tôi có thể giúp:\n` +
       `• Tư vấn thiết kế kiến trúc & nội thất\n` +
-      `• Giải đáp về vật liệu, màu sắc, phong thủy\n` +
-      `• Tư vấn chi phí & quy trình xây dựng\n` +
-      `• Giải thích các tiêu chuẩn thiết kế\n\n` +
-      `💬 Hãy nhắn tin trực tiếp để bắt đầu!\n\n` +
-      `📞 Liên hệ: 7/92 Thành Thái, P.14, Q.10, TP.HCM\n` +
-      `🌐 Website: thicongtramsac.vn`,
+      `• Vật liệu, màu sắc, phong thủy\n` +
+      `• Chi phí & quy trình xây dựng\n` +
+      `• Tiêu chuẩn thiết kế BMT Decor\n\n` +
+      `📂 *Upload file:* Gửi file .md/.txt/.json/.csv để thêm vào kho tri thức\n\n` +
+      `💬 Nhắn tin hoặc dùng lệnh /help để biết thêm!`,
       { parse_mode: "Markdown" }
     );
   });
 
   bot.help(async (ctx) => {
     await ctx.reply(
-      `📚 *Hướng dẫn sử dụng BMT Decor Bot*\n\n` +
+      `📚 *Hướng dẫn BMT Decor Bot*\n\n` +
       `*Lệnh:*\n` +
-      `/start - Khởi động bot\n` +
-      `/help - Xem hướng dẫn\n` +
-      `/new - Bắt đầu cuộc trò chuyện mới\n` +
-      `/lienhe - Thông tin liên hệ BMT Decor\n\n` +
-      `*Cách dùng:*\n` +
-      `Nhắn tin bất kỳ câu hỏi về thiết kế kiến trúc, nội thất, vật liệu, chi phí...\n\n` +
-      `*Ví dụ:*\n` +
-      `• "Nhà 5x15m thiết kế 3 tầng nên bố cục thế nào?"\n` +
-      `• "Phong cách Wabi Sabi phù hợp với nhà nào?"\n` +
+      `/start — Chào mừng & giới thiệu\n` +
+      `/help — Xem hướng dẫn\n` +
+      `/new — Cuộc trò chuyện mới\n` +
+      `/lienhe — Thông tin liên hệ\n` +
+      `/instructions — Xem AI Instructions hiện tại\n` +
+      `/knowledge — Xem danh sách tri thức đã lưu\n\n` +
+      `*Tư vấn AI:*\n` +
+      `Nhắn tin bất kỳ câu hỏi về kiến trúc, nội thất...\n\n` +
+      `*Upload tri thức:*\n` +
+      `📎 Gửi file *.md*, *.txt*, *.json*, *.csv* → Bot tự lưu vào kho tri thức BMT\n\n` +
+      `*Ví dụ hỏi:*\n` +
+      `• "Nhà 5x15m thiết kế 3 tầng bố cục thế nào?"\n` +
+      `• "Phong cách Wabi Sabi dùng vật liệu gì?"\n` +
       `• "Chi phí xây nhà 80m² khoảng bao nhiêu?"`,
       { parse_mode: "Markdown" }
     );
@@ -136,9 +155,7 @@ export function startTelegramBot() {
 
   bot.command("new", async (ctx) => {
     const userId = ctx.from?.id;
-    if (userId) {
-      userSessions.delete(userId);
-    }
+    if (userId) userSessions.delete(userId);
     await ctx.reply("🔄 Đã bắt đầu cuộc trò chuyện mới! Bạn muốn hỏi gì?");
   });
 
@@ -153,17 +170,110 @@ export function startTelegramBot() {
     );
   });
 
+  bot.command("instructions", async (ctx) => {
+    try {
+      const aiSettings = await storage.getAiSettings();
+      const instructions = aiSettings?.instructions || "";
+      if (!instructions) {
+        await ctx.reply("ℹ️ Chưa có AI Instructions nào được cài đặt.\nVào *Cài đặt > AI Instructions* trên web tool để thêm.", { parse_mode: "Markdown" });
+        return;
+      }
+      const preview = instructions.length > 1000
+        ? instructions.slice(0, 1000) + `\n\n...(còn ${instructions.length - 1000} ký tự nữa)`
+        : instructions;
+      await ctx.reply(`📋 *AI Instructions hiện tại:*\n\n${preview}`, { parse_mode: "Markdown" });
+    } catch (err) {
+      await ctx.reply("⚠️ Không thể đọc Instructions lúc này.");
+    }
+  });
+
+  bot.command("knowledge", async (ctx) => {
+    try {
+      const files = await storage.getKnowledgeFiles();
+      if (files.length === 0) {
+        await ctx.reply("📭 Kho tri thức đang trống.\nUpload file .md/.txt/.json/.csv để bắt đầu!");
+        return;
+      }
+      const fileList = files.map((f, i) =>
+        `${i + 1}. 📄 *${f.originalName}* (${Math.round(f.fileSize / 1024)}KB)`
+      ).join("\n");
+
+      await ctx.reply(
+        `📚 *Kho Tri Thức BMT Decor* (${files.length} file)\n\n${fileList}\n\n` +
+        `_Upload file mới để thêm vào kho tri thức_`,
+        { parse_mode: "Markdown" }
+      );
+    } catch (err) {
+      await ctx.reply("⚠️ Không thể đọc danh sách tri thức lúc này.");
+    }
+  });
+
+  bot.on(message("document"), async (ctx) => {
+    const doc = ctx.message.document;
+    const fileName = doc.file_name || "unknown";
+    const fileExt = "." + fileName.split(".").pop()?.toLowerCase();
+
+    if (!ALLOWED_EXTENSIONS.includes(fileExt)) {
+      await ctx.reply(
+        `⚠️ *File không hỗ trợ!*\n\n` +
+        `Chỉ hỗ trợ: ${ALLOWED_EXTENSIONS.join(", ")}\n` +
+        `Bạn gửi: \`${fileName}\``,
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
+
+    if (doc.file_size && doc.file_size > 5 * 1024 * 1024) {
+      await ctx.reply("⚠️ File quá lớn! Tối đa 5MB.");
+      return;
+    }
+
+    const processingMsg = await ctx.reply(`⏳ Đang xử lý file *${fileName}*...`, { parse_mode: "Markdown" });
+
+    try {
+      const content = await downloadTelegramFile(doc.file_id);
+      if (!content) {
+        await ctx.reply("❌ Không thể tải file. Vui lòng thử lại.");
+        return;
+      }
+
+      const trimmedContent = content.slice(0, 200000);
+
+      await storage.createKnowledgeFile({
+        name: `telegram_${Date.now()}_${fileName}`,
+        originalName: fileName,
+        content: trimmedContent,
+        fileType: fileExt.replace(".", ""),
+        fileSize: Buffer.byteLength(trimmedContent, "utf8"),
+      });
+
+      const charCount = trimmedContent.length;
+      const wordCount = trimmedContent.split(/\s+/).filter(Boolean).length;
+
+      await ctx.reply(
+        `✅ *Đã lưu vào kho tri thức!*\n\n` +
+        `📄 File: *${fileName}*\n` +
+        `📊 Dung lượng: ${Math.round(doc.file_size! / 1024)}KB\n` +
+        `✏️ Ký tự: ${charCount.toLocaleString()}\n` +
+        `📝 Từ: ${wordCount.toLocaleString()}\n\n` +
+        `🧠 AI của BMT Decor sẽ sử dụng tri thức này ngay lập tức!`,
+        { parse_mode: "Markdown" }
+      );
+    } catch (err: any) {
+      console.error("[TelegramBot] File save error:", err.message);
+      await ctx.reply("❌ Lỗi khi lưu file. Vui lòng thử lại sau.");
+    }
+  });
+
   bot.on(message("text"), async (ctx) => {
     const userId = ctx.from?.id;
     const userText = ctx.message.text;
-
     if (!userId) return;
 
     await ctx.sendChatAction("typing");
 
     try {
       const reply = await askAI(userId, userText);
-
       if (reply.length > 4096) {
         const chunks = reply.match(/.{1,4096}/gs) || [reply];
         for (const chunk of chunks) {
@@ -178,7 +288,7 @@ export function startTelegramBot() {
     }
   });
 
-  bot.catch((err: any, ctx: Context) => {
+  bot.catch((err: any) => {
     console.error("[TelegramBot] Error:", err.message);
   });
 
@@ -188,7 +298,7 @@ export function startTelegramBot() {
   bot.launch({
     allowedUpdates: ["message", "callback_query"],
   }).catch((err: any) => {
-    console.error("[TelegramBot] ❌ Failed:", err.message);
+    console.error("[TelegramBot] ❌ Launch failed:", err.message);
   });
 
   console.log("[TelegramBot] ✅ BMT Decor Telegram Bot is LIVE!");

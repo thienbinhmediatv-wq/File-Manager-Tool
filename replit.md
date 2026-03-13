@@ -139,6 +139,33 @@ Each step (3-7) has a corresponding Cẩm nang (handbook) stored in `knowledge_f
 - pdf-parse uses `createRequire` (CJS) to avoid ESM path resolution issues in tsx
 - AI chat auto-detects Drive links in messages and fetches file content
 
+## Telegram Bot (BMT Decor AI Bot)
+- **File**: `server/telegramBot.ts` — started via `startTelegramBot()` in `server/index.ts`
+- **Token**: Stored in `TELEGRAM_BOT_TOKEN` secret
+- **Shares**: Same PostgreSQL DB, same `ai_settings`, same `knowledge_files`, same Drive knowledge as web tool
+
+### Commands
+- `/start` — Welcome message + intro
+- `/help` — Full guide + upload instructions
+- `/new` — Reset conversation history
+- `/lienhe` — BMT Decor contact info
+- `/instructions` — View current AI Instructions (from Settings)
+- `/knowledge` — List all knowledge files stored
+
+### File Upload (Telegram → Knowledge Base)
+- User sends `.md`, `.txt`, `.json`, `.csv` file via Telegram
+- Bot downloads → extracts text → saves to `knowledge_files` table (same as Settings upload)
+- Max file size: 5MB
+- AI uses new knowledge immediately (no restart needed)
+- Confirms with file stats (size, chars, words)
+
+### AI Chat
+- Uses same `buildSystemPrompt()`: AI Instructions + knowledge_files + Drive knowledge
+- Conversation memory: 20 messages per user (in-memory Map by userId)
+- Reset with `/new` command
+- Auto-split replies > 4096 chars (Telegram limit)
+- Model: `gpt-4o-mini`
+
 ## External APIs (Currently Used)
 - **OpenAI** (gpt-5.1, gpt-audio, DALL-E) - Chat, audio transcription, image generation — ~$5-10/tháng
 - **SerpAPI** - Google search for design references — ~$5-20/tháng
