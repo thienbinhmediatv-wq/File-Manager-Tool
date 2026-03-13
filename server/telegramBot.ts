@@ -5,6 +5,7 @@ import { storage } from "./storage";
 import { getDriveKnowledge } from "./driveKnowledge";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+const ADMIN_PASSWORD = process.env.TELEGRAM_ADMIN_PASSWORD || "BMTDecor2025";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -13,8 +14,10 @@ const openai = new OpenAI({
 
 const MAX_KNOWLEDGE_CHARS = 12000;
 const ALLOWED_EXTENSIONS = [".md", ".txt", ".json", ".csv"];
+const UNLOCK_TIMEOUT = 60 * 60 * 1000; // 1 hour
 
 const userSessions: Map<number, { messages: { role: string; content: string }[] }> = new Map();
+const adminUnlocked: Map<number, { unlockedAt: number; unlockExpire: NodeJS.Timeout }> = new Map();
 
 async function buildSystemPrompt(): Promise<string> {
   const [aiSettings, knowledgeFiles, driveKnowledge] = await Promise.all([
@@ -108,6 +111,31 @@ async function downloadTelegramFile(fileId: string): Promise<string | null> {
   }
 }
 
+function isAdminUnlocked(userId: number): boolean {
+  if (!adminUnlocked.has(userId)) return false;
+  const session = adminUnlocked.get(userId)!;
+  const elapsed = Date.now() - session.unlockedAt;
+  if (elapsed > UNLOCK_TIMEOUT) {
+    clearTimeout(session.unlockExpire);
+    adminUnlocked.delete(userId);
+    return false;
+  }
+  return true;
+}
+
+function unlockAdmin(userId: number) {
+  if (adminUnlocked.has(userId)) {
+    const old = adminUnlocked.get(userId)!;
+    clearTimeout(old.unlockExpire);
+  }
+
+  const timeout = setTimeout(() => {
+    adminUnlocked.delete(userId);
+  }, UNLOCK_TIMEOUT);
+
+  adminUnlocked.set(userId, { unlockedAt: Date.now(), unlockExpire: timeout });
+}
+
 export function startTelegramBot() {
   if (!BOT_TOKEN) {
     console.log("[TelegramBot] No TELEGRAM_BOT_TOKEN, skipping");
@@ -125,7 +153,6 @@ export function startTelegramBot() {
       `• Vật liệu, màu sắc, phong thủy\n` +
       `• Chi phí & quy trình xây dựng\n` +
       `• Tiêu chuẩn thiết kế BMT Decor\n\n` +
-      `📂 *Upload file:* Gửi file .md/.txt/.json/.csv để thêm vào kho tri thức\n\n` +
       `💬 Nhắn tin hoặc dùng lệnh /help để biết thêm!`,
       { parse_mode: "Markdown" }
     );
@@ -134,17 +161,15 @@ export function startTelegramBot() {
   bot.help(async (ctx) => {
     await ctx.reply(
       `📚 *Hướng dẫn BMT Decor Bot*\n\n` +
-      `*Lệnh:*\n` +
+      `*Lệnh công khai:*\n` +
       `/start — Chào mừng & giới thiệu\n` +
       `/help — Xem hướng dẫn\n` +
       `/new — Cuộc trò chuyện mới\n` +
       `/lienhe — Thông tin liên hệ\n` +
       `/instructions — Xem AI Instructions hiện tại\n` +
-      `/knowledge — Xem danh sách tri thức đã lưu\n\n` +
+      `/knowledge — Danh sách tri thức đã lưu\n\n` +
       `*Tư vấn AI:*\n` +
       `Nhắn tin bất kỳ câu hỏi về kiến trúc, nội thất...\n\n` +
-      `*Upload tri thức:*\n` +
-      `📎 Gửi file *.md*, *.txt*, *.json*, *.csv* → Bot tự lưu vào kho tri thức BMT\n\n` +
       `*Ví dụ hỏi:*\n` +
       `• "Nhà 5x15m thiết kế 3 tầng bố cục thế nào?"\n` +
       `• "Phong cách Wabi Sabi dùng vật liệu gì?"\n` +
@@ -191,7 +216,7 @@ export function startTelegramBot() {
     try {
       const files = await storage.getKnowledgeFiles();
       if (files.length === 0) {
-        await ctx.reply("📭 Kho tri thức đang trống.\nUpload file .md/.txt/.json/.csv để bắt đầu!");
+        await ctx.reply("📭 Kho tri thức đang trống.\nGõ /unlock để unlock upload tri thức!");
         return;
       }
       const fileList = files.map((f, i) =>
@@ -199,8 +224,7 @@ export function startTelegramBot() {
       ).join("\n");
 
       await ctx.reply(
-        `📚 *Kho Tri Thức BMT Decor* (${files.length} file)\n\n${fileList}\n\n` +
-        `_Upload file mới để thêm vào kho tri thức_`,
+        `📚 *Kho Tri Thức BMT Decor* (${files.length} file)\n\n${fileList}`,
         { parse_mode: "Markdown" }
       );
     } catch (err) {
@@ -208,7 +232,53 @@ export function startTelegramBot() {
     }
   });
 
+  bot.command("unlock", async (ctx) => {
+    const userId = ctx.from?.id;
+    if (!userId) return;
+
+    const args = ctx.message.text.split(" ").slice(1).join("");
+    
+    if (!args) {
+      await ctx.reply(
+        `🔐 *Admin Mode - Unlock tính năng upload*\n\n` +
+        `Cú pháp: \`/unlock <password>\`\n\n` +
+        `Ví dụ: \`/unlock mật_khẩu_của_bạn\`\n\n` +
+        `⏱️ Sau unlock, bạn có 1 giờ để upload file tri thức.`,
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
+
+    if (args !== ADMIN_PASSWORD) {
+      await ctx.reply("❌ *Mật khẩu sai!* ❌");
+      return;
+    }
+
+    unlockAdmin(userId);
+    await ctx.reply(
+      `✅ *Đã unlock Admin Mode!*\n\n` +
+      `⏱️ Bạn có 1 giờ để upload file tri thức (.md, .txt, .json, .csv)\n` +
+      `📎 Gửi file bình thường (attach file) để lưu vào kho tri thức.\n\n` +
+      `_Sau 1 giờ sẽ tự động lock lại._`,
+      { parse_mode: "Markdown" }
+    );
+    console.log(`[TelegramBot] Admin unlocked: userId=${userId}`);
+  });
+
   bot.on(message("document"), async (ctx) => {
+    const userId = ctx.from?.id;
+    if (!userId) return;
+
+    if (!isAdminUnlocked(userId)) {
+      await ctx.reply(
+        `🔒 *Tính năng upload bị khóa!*\n\n` +
+        `Bạn cần gõ lệnh `/unlock <password>` trước khi upload.\n\n` +
+        `_Chỉ admin mới có thể unlock._`,
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
+
     const doc = ctx.message.document;
     const fileName = doc.file_name || "unknown";
     const fileExt = "." + fileName.split(".").pop()?.toLowerCase();
@@ -259,6 +329,7 @@ export function startTelegramBot() {
         `🧠 AI của BMT Decor sẽ sử dụng tri thức này ngay lập tức!`,
         { parse_mode: "Markdown" }
       );
+      console.log(`[TelegramBot] Admin uploaded: userId=${userId}, file=${fileName}`);
     } catch (err: any) {
       console.error("[TelegramBot] File save error:", err.message);
       await ctx.reply("❌ Lỗi khi lưu file. Vui lòng thử lại sau.");

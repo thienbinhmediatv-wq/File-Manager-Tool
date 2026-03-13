@@ -141,30 +141,40 @@ Each step (3-7) has a corresponding Cẩm nang (handbook) stored in `knowledge_f
 
 ## Telegram Bot (BMT Decor AI Bot)
 - **File**: `server/telegramBot.ts` — started via `startTelegramBot()` in `server/index.ts`
-- **Token**: Stored in `TELEGRAM_BOT_TOKEN` secret
+- **Token**: `TELEGRAM_BOT_TOKEN` secret
+- **Admin Password**: `TELEGRAM_ADMIN_PASSWORD` secret (for secure file upload)
 - **Shares**: Same PostgreSQL DB, same `ai_settings`, same `knowledge_files`, same Drive knowledge as web tool
 
-### Commands
-- `/start` — Welcome message + intro
-- `/help` — Full guide + upload instructions
-- `/new` — Reset conversation history
-- `/lienhe` — BMT Decor contact info
-- `/instructions` — View current AI Instructions (from Settings)
-- `/knowledge` — List all knowledge files stored
+### Public Commands (Anyone)
+- `/start` — Welcome + intro
+- `/help` — Full guide
+- `/new` — Reset conversation
+- `/lienhe` — Contact info
+- `/instructions` — View AI Instructions (from Settings)
+- `/knowledge` — List knowledge files
 
-### File Upload (Telegram → Knowledge Base)
-- User sends `.md`, `.txt`, `.json`, `.csv` file via Telegram
-- Bot downloads → extracts text → saves to `knowledge_files` table (same as Settings upload)
-- Max file size: 5MB
-- AI uses new knowledge immediately (no restart needed)
-- Confirms with file stats (size, chars, words)
+### Admin Command (Password Protected)
+- `/unlock <password>` — Unlock file upload for 1 hour
+  - Requires correct `TELEGRAM_ADMIN_PASSWORD`
+  - Returns error if wrong password
+  - Session expires after 1 hour (auto-lock)
+  - Per-user session tracking
+
+### File Upload (Admin Only)
+- Only after unlocking with correct password
+- Accepts: `.md`, `.txt`, `.json`, `.csv` (max 5MB)
+- Bot downloads → saves to `knowledge_files` table
+- AI uses immediately (no restart)
+- Confirms with file stats: size, characters, words
+- Logged with userId + filename
 
 ### AI Chat
-- Uses same `buildSystemPrompt()`: AI Instructions + knowledge_files + Drive knowledge
-- Conversation memory: 20 messages per user (in-memory Map by userId)
-- Reset with `/new` command
-- Auto-split replies > 4096 chars (Telegram limit)
+- Uses same system prompt: AI Instructions + knowledge_files + Drive knowledge
+- Per-user conversation memory: 20 messages (in-memory)
+- Reset with `/new`
+- Auto-split replies > 4096 chars
 - Model: `gpt-4o-mini`
+- Available to all users (no unlock needed for chat)
 
 ## External APIs (Currently Used)
 - **OpenAI** (gpt-5.1, gpt-audio, DALL-E) - Chat, audio transcription, image generation — ~$5-10/tháng
