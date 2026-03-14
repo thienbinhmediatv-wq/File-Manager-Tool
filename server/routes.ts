@@ -2401,19 +2401,115 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
     }
   });
 
-  app.get("/api/knowledge-stats", async (_req, res) => {
+  app.patch("/api/knowledge-files/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      const { tags, tagsManual, categoryId, pendingUpdate } = req.body;
+      const updates: any = {};
+      if (tags !== undefined) updates.tags = tags;
+      if (tagsManual !== undefined) updates.tagsManual = tagsManual;
+      if (categoryId !== undefined) updates.categoryId = categoryId;
+      if (pendingUpdate !== undefined) updates.pendingUpdate = pendingUpdate;
+      const updated = await storage.updateKnowledgeFile(id, updates);
+      res.json(updated);
+    } catch (err) {
+      console.error("Update knowledge file error:", err);
+      res.status(500).json({ message: "Failed to update file" });
+    }
+  });
+
+  app.get("/api/knowledge-categories", async (_req, res) => {
+    try {
+      const cats = await storage.getKnowledgeCategories();
+      res.json(cats);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to get categories" });
+    }
+  });
+
+  app.post("/api/knowledge-categories", async (req, res) => {
+    try {
+      const { name, parentId, icon, color } = req.body;
+      if (!name) return res.status(400).json({ message: "name required" });
+      const cat = await storage.createKnowledgeCategory({ name, parentId: parentId || null, icon, color });
+      res.json(cat);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to create category" });
+    }
+  });
+
+  app.patch("/api/knowledge-categories/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      const { name, parentId, icon, color } = req.body;
+      const updated = await storage.updateKnowledgeCategory(id, { name, parentId, icon, color });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update category" });
+    }
+  });
+
+  app.delete("/api/knowledge-categories/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      await storage.deleteKnowledgeCategory(id);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete category" });
+    }
+  });
+
+  app.post("/api/knowledge/reindex", async (_req, res) => {
     try {
       const files = await storage.getKnowledgeFiles();
+      await storage.setReindexStatus(false, new Date());
+      for (const f of files) {
+        if (f.pendingUpdate) {
+          await storage.updateKnowledgeFile(f.id, { pendingUpdate: 0 });
+        }
+      }
+      res.json({ success: true, indexed: files.length, indexedAt: new Date().toISOString() });
+    } catch (err) {
+      console.error("Reindex error:", err);
+      res.status(500).json({ message: "Reindex failed" });
+    }
+  });
+
+  app.get("/api/knowledge-stats", async (_req, res) => {
+    try {
+      const [files, categories, settings] = await Promise.all([
+        storage.getKnowledgeFiles(),
+        storage.getKnowledgeCategories(),
+        storage.getAiSettings(),
+      ]);
       const total = files.length;
       const byType: Record<string, number> = {};
       const bySource: Record<string, number> = {};
+      let totalTags = 0;
+      let pendingCount = 0;
       for (const f of files) {
         const t = f.fileType?.toLowerCase() || "text";
         byType[t] = (byType[t] || 0) + 1;
-        const s = (f as any).source || "upload";
+        const s = f.source || "upload";
         bySource[s] = (bySource[s] || 0) + 1;
+        totalTags += (f.tags?.length || 0) + (f.tagsManual?.length || 0);
+        if ((f as any).pendingUpdate) pendingCount++;
       }
-      res.json({ total, byType, bySource });
+      const vectorChunks = files.reduce((sum, f) => sum + Math.max(1, Math.ceil(f.content.length / 500)), 0);
+      res.json({
+        total,
+        categories: categories.length,
+        totalTags,
+        vectorChunks,
+        byType,
+        bySource,
+        pendingCount,
+        indexedAt: (settings as any)?.indexedAt || null,
+        pendingReindex: (settings as any)?.pendingReindex || 0,
+      });
     } catch (err) {
       console.error("Knowledge stats error:", err);
       res.status(500).json({ message: "Failed to get stats" });

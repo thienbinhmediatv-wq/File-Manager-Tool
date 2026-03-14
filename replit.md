@@ -6,6 +6,13 @@ BMT Decor (CÔNG TY TNHH TMDV BMT DECOR) is an AI-powered Vietnamese architectur
 - **Director**: Võ Quốc Bảo
 - **Website**: thicongtramsac.vn
 
+## Knowledge Management System (v2)
+- **knowledge_categories** table: id, name, parentId, icon, color — tree folder structure
+- **knowledge_files** extended: tags (AI tags), tagsManual (manual tags), categoryId, source (upload/drive/telegram_bot/api_sync), pendingUpdate, lastUpdated
+- **API endpoints**: GET/POST/DELETE/PATCH `/api/knowledge-categories`, PATCH `/api/knowledge-files/:id`, POST `/api/knowledge/reindex`
+- **Stats endpoint** `/api/knowledge-stats`: total, categories, totalTags, vectorChunks, byType, bySource, pendingCount, indexedAt
+- **UI**: Stats dashboard (4 cards), Category tree (left panel), File table with expandable tags (AI+manual), Reindex button with pending state
+
 ## Cẩm Nang Knowledge System (5 files in DB)
 Each step (3-7) has a corresponding Cẩm nang (handbook) stored in `knowledge_files` table:
 - **Bước 3**: 2D CAD — Layer chuẩn (A-WALL, A-COLM, A-DIM, A-BOUND), Dimension 3 lớp, khoảng lùi 1.2-1.4m, cầu thang Sinh 16-18cm, Title Block A/E chuẩn

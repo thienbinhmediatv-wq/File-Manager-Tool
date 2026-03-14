@@ -8,7 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Save, Upload, Trash2, FileText, Brain, CreditCard, Loader2, AlertCircle, Lock, Eye, EyeOff, FolderSync, CheckCircle, XCircle, Database, BookOpen, Link as LinkIcon, Tag, Sparkles, BarChart2, X, Plus } from "lucide-react";
+import {
+  Save, Upload, Trash2, FileText, Brain, CreditCard, Loader2, AlertCircle, Lock, Eye, EyeOff,
+  FolderSync, CheckCircle, XCircle, Database, BookOpen, Link as LinkIcon, Tag, Sparkles, BarChart2,
+  X, Plus, Folder, FolderOpen, RefreshCw, Hash, Layers, Clock, ChevronRight, ChevronDown
+} from "lucide-react";
 import { useRef } from "react";
 
 interface KnowledgeFile {
@@ -18,14 +22,33 @@ interface KnowledgeFile {
   fileType: string;
   fileSize: number;
   tags: string[] | null;
+  tagsManual: string[] | null;
+  categoryId: number | null;
   source: string;
+  pendingUpdate: number | null;
+  lastUpdated: string | null;
+  createdAt: string;
+}
+
+interface KnowledgeCategory {
+  id: number;
+  name: string;
+  parentId: number | null;
+  icon: string | null;
+  color: string | null;
   createdAt: string;
 }
 
 interface KnowledgeStats {
   total: number;
+  categories: number;
+  totalTags: number;
+  vectorChunks: number;
   byType: Record<string, number>;
   bySource: Record<string, number>;
+  pendingCount: number;
+  indexedAt: string | null;
+  pendingReindex: number;
 }
 
 function formatFileSize(bytes: number) {
@@ -33,6 +56,29 @@ function formatFileSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+function formatRelative(dateStr: string | null) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diff = now.getTime() - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 2) return "vừa xong";
+  if (mins < 60) return `${mins} phút trước`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} giờ trước`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} ngày trước`;
+  return d.toLocaleDateString("vi-VN");
+}
+
+const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
+  upload: { label: "Upload", color: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
+  drive: { label: "Drive", color: "bg-orange-500/10 text-orange-600 dark:text-orange-400" },
+  google_drive: { label: "Drive", color: "bg-orange-500/10 text-orange-600 dark:text-orange-400" },
+  telegram_bot: { label: "Telegram", color: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
+  api_sync: { label: "API", color: "bg-purple-500/10 text-purple-600 dark:text-purple-400" },
+};
 
 export default function Settings() {
   const { toast } = useToast();
@@ -42,6 +88,10 @@ export default function Settings() {
   const [showPassword, setShowPassword] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [passwordError, setPasswordError] = useState("");
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null | "all">("all");
+  const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set());
+  const [newCatName, setNewCatName] = useState("");
+  const [addingCat, setAddingCat] = useState(false);
 
   const handleVerifyPassword = async () => {
     setIsVerifying(true);
@@ -85,6 +135,23 @@ export default function Settings() {
   const statsQuery = useQuery<KnowledgeStats>({
     queryKey: ["/api/knowledge-stats"],
     enabled: isAuthenticated,
+    refetchInterval: 15000,
+  });
+
+  const categoriesQuery = useQuery<KnowledgeCategory[]>({
+    queryKey: ["/api/knowledge-categories"],
+    enabled: isAuthenticated,
+  });
+
+  const updateFileMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: number; updates: Partial<KnowledgeFile> }) => {
+      const res = await apiRequest("PATCH", `/api/knowledge-files/${id}`, updates);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
+    },
   });
 
   const updateTagsMutation = useMutation({
@@ -94,6 +161,7 @@ export default function Settings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
     },
   });
 
@@ -135,6 +203,7 @@ export default function Settings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
       toast({ title: "Đã tải lên", description: "File tri thức đã được thêm" });
     },
     onError: () => {
@@ -148,6 +217,7 @@ export default function Settings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
       toast({ title: "Đã xóa", description: "File tri thức đã được xóa" });
     },
     onError: () => {
@@ -155,16 +225,72 @@ export default function Settings() {
     },
   });
 
+  const createCategoryMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await apiRequest("POST", "/api/knowledge-categories", { name });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
+      setNewCatName("");
+      setAddingCat(false);
+    },
+    onError: () => {
+      toast({ title: "Lỗi", description: "Không thể tạo danh mục", variant: "destructive" });
+    },
+  });
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/knowledge-categories/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
+    },
+  });
+
+  const reindexMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/knowledge/reindex");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
+      toast({ title: "Đã cập nhật AI Index", description: `${data.indexed} files đã được đánh chỉ mục` });
+    },
+    onError: () => {
+      toast({ title: "Lỗi", description: "Không thể rebuild AI index", variant: "destructive" });
+    },
+  });
+
   const handleFileUpload = () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".txt,.md,.csv,.json";
+    input.accept = ".txt,.md,.csv,.json,.pdf";
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) uploadMutation.mutate(file);
     };
     input.click();
   };
+
+  const allFiles = filesQuery.data || [];
+  const categories = categoriesQuery.data || [];
+
+  const filteredFiles = selectedCategoryId === "all"
+    ? allFiles
+    : selectedCategoryId === null
+      ? allFiles.filter(f => !f.categoryId)
+      : allFiles.filter(f => f.categoryId === selectedCategoryId);
+
+  const getFilesForCategory = (catId: number) => allFiles.filter(f => f.categoryId === catId).length;
+  const uncategorizedCount = allFiles.filter(f => !f.categoryId).length;
+
+  const pendingCount = statsQuery.data?.pendingCount || 0;
 
   if (!isAuthenticated) {
     return (
@@ -199,17 +325,17 @@ export default function Settings() {
                 </button>
               </div>
               {passwordError && (
-                <p className="text-sm text-red-500 flex items-center gap-1" data-testid="text-password-error">
-                  <AlertCircle className="w-3.5 h-3.5" /> {passwordError}
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5" />{passwordError}
                 </p>
               )}
               <Button
+                className="w-full"
                 onClick={handleVerifyPassword}
-                disabled={!password.trim() || isVerifying}
-                className="w-full rounded-xl h-11"
+                disabled={isVerifying || !password}
                 data-testid="button-verify-password"
               >
-                {isVerifying ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Lock className="w-4 h-4 mr-2" />}
+                {isVerifying ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Lock className="w-4 h-4 mr-2" />}
                 Xác nhận
               </Button>
             </CardContent>
@@ -221,10 +347,10 @@ export default function Settings() {
 
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto" data-testid="page-settings">
+      <div className="max-w-6xl mx-auto py-6 px-4" data-testid="page-settings">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-foreground" data-testid="text-settings-title">Cài đặt</h1>
-          <p className="text-muted-foreground mt-1">Quản lý AI Instructions và file tri thức</p>
+          <h1 className="text-2xl font-bold text-foreground">Cài Đặt</h1>
+          <p className="text-sm text-muted-foreground mt-1">BMT Decor — Quản lý AI & Kho Tri Thức</p>
         </div>
 
         <Tabs defaultValue="knowledge" className="space-y-5">
@@ -246,99 +372,296 @@ export default function Settings() {
             </TabsTrigger>
           </TabsList>
 
+          {/* ===== KHO TRI THỨC TAB ===== */}
           <TabsContent value="knowledge" className="space-y-5 mt-0">
             {/* Header */}
-            <div className="mb-6">
-              <h2 className="text-xl font-bold text-foreground">Kho Tri Thức AI</h2>
-              <p className="text-sm text-muted-foreground mt-1">Quản lý AI Instructions via file tri thức</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-foreground">Kho Tri Thức AI</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">Quản lý dữ liệu AI học từ tài liệu, tags và danh mục</p>
+              </div>
+              <Button onClick={handleFileUpload} disabled={uploadMutation.isPending} className="gap-2" data-testid="button-upload-knowledge">
+                {uploadMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                Upload File
+              </Button>
             </div>
 
-            {/* Upload Section - Prominent */}
-            <Card className="border-primary/20 bg-primary/5">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shrink-0">
-                    <Upload className="w-4 h-4 text-white" />
+            {/* Stats Dashboard */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                {
+                  icon: <FileText className="w-4 h-4" />,
+                  label: "Tổng Files",
+                  value: statsQuery.data?.total ?? "—",
+                  color: "text-blue-600 dark:text-blue-400",
+                  bg: "bg-blue-500/8",
+                },
+                {
+                  icon: <Folder className="w-4 h-4" />,
+                  label: "Danh Mục",
+                  value: statsQuery.data?.categories ?? "—",
+                  color: "text-orange-600 dark:text-orange-400",
+                  bg: "bg-orange-500/8",
+                },
+                {
+                  icon: <Hash className="w-4 h-4" />,
+                  label: "Tổng Tags",
+                  value: statsQuery.data?.totalTags ?? "—",
+                  color: "text-purple-600 dark:text-purple-400",
+                  bg: "bg-purple-500/8",
+                },
+                {
+                  icon: <Layers className="w-4 h-4" />,
+                  label: "Vector Chunks",
+                  value: statsQuery.data?.vectorChunks ?? "—",
+                  color: "text-green-600 dark:text-green-400",
+                  bg: "bg-green-500/8",
+                },
+              ].map((s) => (
+                <div key={s.label} className={`rounded-xl p-3 border border-border/50 ${s.bg} flex items-center gap-3`} data-testid={`stat-${s.label}`}>
+                  <div className={`${s.color} opacity-70`}>{s.icon}</div>
+                  <div>
+                    <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+                    <p className="text-xs text-muted-foreground">{s.label}</p>
                   </div>
-                  <div className="flex-1">
-                    <CardTitle className="text-base">Upload Tri Thức</CardTitle>
-                    <CardDescription className="text-xs">Hỗ trợ: TXT • MD • JSON • PDF (tối đa 5MB)</CardDescription>
-                  </div>
-                  <Button onClick={handleFileUpload} disabled={uploadMutation.isPending} className="gap-2" data-testid="button-upload-knowledge">
-                    {uploadMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                    <span className="hidden sm:inline">Upload File</span>
-                  </Button>
                 </div>
-              </CardHeader>
-            </Card>
+              ))}
+            </div>
 
-            {/* Google Drive Section */}
-            <Card className="border-border/50">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
-                    <LinkIcon className="w-4 h-4 text-orange-500" />
-                  </div>
-                  <div className="flex-1">
-                    <CardTitle className="text-base">Học từ Google Drive Links</CardTitle>
-                    <CardDescription className="text-xs">Paste Drive link để AI tham khảo trực tiếp</CardDescription>
-                  </div>
+            {/* Reindex bar */}
+            {(pendingCount > 0 || statsQuery.data?.indexedAt) && (
+              <div className="flex items-center justify-between p-3 rounded-xl bg-amber-500/8 border border-amber-200/60 dark:border-amber-800/40">
+                <div className="text-sm">
+                  {pendingCount > 0 ? (
+                    <span className="text-amber-700 dark:text-amber-400 font-medium">
+                      {pendingCount} file chờ cập nhật vào AI Index
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">
+                      AI Index đã đồng bộ
+                      {statsQuery.data?.indexedAt && ` — ${formatRelative(statsQuery.data.indexedAt)}`}
+                    </span>
+                  )}
                 </div>
-              </CardHeader>
-              <CardContent>
-                <DriveLinksLearner />
-              </CardContent>
-            </Card>
+                <Button
+                  variant={pendingCount > 0 ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => reindexMutation.mutate()}
+                  disabled={reindexMutation.isPending}
+                  className="gap-2"
+                  data-testid="button-reindex"
+                >
+                  {reindexMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  {pendingCount > 0 ? "Cập nhật AI" : "Rebuild Index"}
+                </Button>
+              </div>
+            )}
 
-            {/* File Tri Thức - File List with Tags */}
-            <Card className="border-border/50">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
+            {/* Upload + Drive row */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Card className="border-primary/20 bg-primary/5">
+                <CardHeader className="pb-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-                      <FileText className="w-4 h-4 text-blue-500" />
+                    <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
+                      <Upload className="w-4 h-4 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <CardTitle className="text-sm">Upload Tri Thức</CardTitle>
+                      <CardDescription className="text-xs">TXT • MD • JSON • PDF (5MB)</CardDescription>
+                    </div>
+                    <Button size="sm" onClick={handleFileUpload} disabled={uploadMutation.isPending} className="gap-1.5" data-testid="button-upload-knowledge-2">
+                      {uploadMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      Upload
+                    </Button>
+                  </div>
+                </CardHeader>
+              </Card>
+
+              <Card className="border-border/50">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
+                      <LinkIcon className="w-4 h-4 text-orange-500" />
                     </div>
                     <div>
-                      <CardTitle className="text-base">File Tri Thức ({filesQuery.data?.length || 0})</CardTitle>
-                      <CardDescription className="text-xs">Danh sách file đã tải lên</CardDescription>
+                      <CardTitle className="text-sm">Google Drive Links</CardTitle>
+                      <CardDescription className="text-xs">Paste Drive link để AI học</CardDescription>
                     </div>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {filesQuery.isLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : !filesQuery.data || filesQuery.data.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                    <p className="text-sm">Chưa có file tri thức nào</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {filesQuery.data.map((file) => (
-                      <FileRowWithTags
-                        key={file.id}
-                        file={file}
-                        onDelete={() => deleteMutation.mutate(file.id)}
-                        onAutoTag={() => autoTagMutation.mutate(file.id)}
-                        onUpdateTags={(tags) => updateTagsMutation.mutate({ id: file.id, tags })}
-                        isDeleting={deleteMutation.isPending}
-                        isAutoTagging={autoTagMutation.isPending && autoTagMutation.variables === file.id}
-                      />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <DriveLinksLearner />
+                </CardContent>
+              </Card>
+            </div>
 
-            {/* Templates & OCR - Compact */}
+            {/* Main: Category Tree + File Table */}
+            <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
+              {/* Left: Category Tree */}
+              <Card className="border-border/50 h-fit">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Folder className="w-4 h-4 text-orange-500" />
+                      Danh Mục
+                    </CardTitle>
+                    <button
+                      onClick={() => setAddingCat(true)}
+                      className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      title="Thêm danh mục"
+                      data-testid="button-add-category"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-0 pb-3">
+                  <div className="space-y-0.5">
+                    {/* All Files */}
+                    <button
+                      onClick={() => setSelectedCategoryId("all")}
+                      className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors ${selectedCategoryId === "all" ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted text-foreground"}`}
+                      data-testid="cat-all"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Database className="w-3.5 h-3.5" />
+                        Tất cả
+                      </span>
+                      <span className="text-muted-foreground">{allFiles.length}</span>
+                    </button>
+
+                    {/* Uncategorized */}
+                    <button
+                      onClick={() => setSelectedCategoryId(null)}
+                      className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors ${selectedCategoryId === null ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted text-muted-foreground"}`}
+                      data-testid="cat-uncategorized"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5" />
+                        Chưa phân loại
+                      </span>
+                      <span>{uncategorizedCount}</span>
+                    </button>
+
+                    {/* Categories */}
+                    {categories.map((cat) => (
+                      <div key={cat.id} className="group">
+                        <div className={`flex items-center justify-between px-2 py-1.5 rounded-lg transition-colors ${selectedCategoryId === cat.id ? "bg-primary/10 text-primary" : "hover:bg-muted"}`}>
+                          <button
+                            onClick={() => setSelectedCategoryId(cat.id)}
+                            className="flex-1 text-left text-xs flex items-center gap-1.5"
+                            data-testid={`cat-${cat.id}`}
+                          >
+                            <Folder className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                            <span className="truncate font-medium">{cat.name}</span>
+                          </button>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground">{getFilesForCategory(cat.id)}</span>
+                            <button
+                              onClick={() => deleteCategoryMutation.mutate(cat.id)}
+                              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:text-destructive transition-all"
+                              data-testid={`button-delete-cat-${cat.id}`}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Add category form */}
+                    {addingCat && (
+                      <div className="flex items-center gap-1 pt-1">
+                        <Input
+                          autoFocus
+                          value={newCatName}
+                          onChange={(e) => setNewCatName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && newCatName.trim()) createCategoryMutation.mutate(newCatName.trim());
+                            if (e.key === "Escape") { setAddingCat(false); setNewCatName(""); }
+                          }}
+                          placeholder="Tên danh mục..."
+                          className="h-7 text-xs"
+                          data-testid="input-new-category"
+                        />
+                        <Button
+                          size="sm"
+                          className="h-7 px-2"
+                          onClick={() => newCatName.trim() && createCategoryMutation.mutate(newCatName.trim())}
+                          disabled={createCategoryMutation.isPending}
+                          data-testid="button-save-category"
+                        >
+                          {createCategoryMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3" />}
+                        </Button>
+                        <button onClick={() => { setAddingCat(false); setNewCatName(""); }} className="p-1 hover:text-destructive">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+
+                    {categories.length === 0 && !addingCat && (
+                      <p className="text-xs text-muted-foreground px-2 pt-2 pb-1">Chưa có danh mục. Nhấn + để thêm.</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Right: File Table */}
+              <Card className="border-border/50">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-blue-500" />
+                      <CardTitle className="text-sm">
+                        {selectedCategoryId === "all" ? "Tất cả Files" :
+                         selectedCategoryId === null ? "Chưa phân loại" :
+                         categories.find(c => c.id === selectedCategoryId)?.name || "Files"}
+                        <span className="ml-2 text-muted-foreground font-normal">({filteredFiles.length})</span>
+                      </CardTitle>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {filesQuery.isLoading ? (
+                    <div className="flex items-center justify-center py-10">
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : filteredFiles.length === 0 ? (
+                    <div className="text-center py-10 text-muted-foreground">
+                      <FileText className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                      <p className="text-sm">Không có file nào</p>
+                      <Button variant="ghost" size="sm" onClick={handleFileUpload} className="mt-2 gap-2" data-testid="button-upload-empty">
+                        <Upload className="w-3.5 h-3.5" />Upload ngay
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {filteredFiles.map((file) => (
+                        <KnowledgeFileRow
+                          key={file.id}
+                          file={file}
+                          categories={categories}
+                          onDelete={() => deleteMutation.mutate(file.id)}
+                          onAutoTag={() => autoTagMutation.mutate(file.id)}
+                          onUpdateAiTags={(tags) => updateTagsMutation.mutate({ id: file.id, tags })}
+                          onUpdateManualTags={(tagsManual) => updateFileMutation.mutate({ id: file.id, updates: { tagsManual, pendingUpdate: 1 } as any })}
+                          onSetCategory={(categoryId) => updateFileMutation.mutate({ id: file.id, updates: { categoryId } as any })}
+                          isDeleting={deleteMutation.isPending}
+                          isAutoTagging={autoTagMutation.isPending && autoTagMutation.variables === file.id}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Templates & OCR */}
             <div className="grid gap-4 sm:grid-cols-2">
               <Card className="border-border/50">
                 <CardHeader className="pb-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                    <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
                       <BookOpen className="w-4 h-4 text-blue-500" />
                     </div>
                     <div>
@@ -355,7 +678,7 @@ export default function Settings() {
               <Card className="border-border/50">
                 <CardHeader className="pb-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                       <Database className="w-4 h-4 text-primary" />
                     </div>
                     <div>
@@ -371,6 +694,7 @@ export default function Settings() {
             </div>
           </TabsContent>
 
+          {/* ===== AI SETTINGS TAB ===== */}
           <TabsContent value="ai" className="space-y-5 mt-0">
             {/* 1. AI Instructions */}
             <Card className="border-border/50">
@@ -412,15 +736,16 @@ export default function Settings() {
                   </div>
                   <div>
                     <CardTitle className="text-base">Nguồn Tri Thức AI</CardTitle>
-                    <CardDescription className="text-xs">Quản lý các nguồn dữ liệu AI sử dụng để xử lý</CardDescription>
+                    <CardDescription className="text-xs">Tổng hợp các nguồn dữ liệu AI đang sử dụng</CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                   {[
-                    { label: "Files Upload", count: statsQuery.data?.bySource?.upload || 0, color: "text-blue-500", bg: "bg-blue-500/10" },
-                    { label: "Google Drive", count: statsQuery.data?.bySource?.drive || 0, color: "text-orange-500", bg: "bg-orange-500/10" },
+                    { label: "Upload", count: statsQuery.data?.bySource?.upload || 0, color: "text-blue-500", bg: "bg-blue-500/10" },
+                    { label: "Google Drive", count: (statsQuery.data?.bySource?.drive || 0) + (statsQuery.data?.bySource?.google_drive || 0), color: "text-orange-500", bg: "bg-orange-500/10" },
+                    { label: "Telegram Bot", count: statsQuery.data?.bySource?.telegram_bot || 0, color: "text-sky-500", bg: "bg-sky-500/10" },
                     { label: "Tổng cộng", count: statsQuery.data?.total || 0, color: "text-primary", bg: "bg-primary/10" },
                   ].map((item) => (
                     <div key={item.label} className={`rounded-xl p-3 ${item.bg}`}>
@@ -432,7 +757,7 @@ export default function Settings() {
               </CardContent>
             </Card>
 
-            {/* 3. Trạng thái xử lý tri thức */}
+            {/* 3. Trạng thái OCR */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-3">
@@ -450,69 +775,7 @@ export default function Settings() {
               </CardContent>
             </Card>
 
-            {/* 4. Tag AI */}
-            <Card className="border-border/50">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-purple-500/10 flex items-center justify-center shrink-0">
-                    <Tag className="w-4 h-4 text-purple-500" />
-                  </div>
-                  <div className="flex-1">
-                    <CardTitle className="text-base">Tag AI</CardTitle>
-                    <CardDescription className="text-xs">AI tự động phân loại tri thức theo tag giúp tìm kiếm nhanh hơn</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {!filesQuery.data || filesQuery.data.length === 0 ? (
-                  <div className="text-center py-6 text-muted-foreground">
-                    <Tag className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">Chưa có file nào để gắn tag</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {filesQuery.data.slice(0, 8).map((file) => (
-                      <div key={file.id} className="flex items-start gap-2 p-2.5 rounded-lg border border-border/50 hover:bg-muted/30 transition-colors">
-                        <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium truncate mb-1">{file.originalName}</p>
-                          <div className="flex flex-wrap gap-1">
-                            {(file.tags || []).map((tag, i) => (
-                              <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs bg-purple-500/10 text-purple-600 dark:text-purple-400">
-                                {tag}
-                                <button onClick={() => {
-                                  const newTags = (file.tags || []).filter((_, idx) => idx !== i);
-                                  updateTagsMutation.mutate({ id: file.id, tags: newTags });
-                                }} className="hover:text-destructive ml-0.5">
-                                  <X className="w-2.5 h-2.5" />
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        <Button
-                          variant="ghost" size="sm"
-                          onClick={() => autoTagMutation.mutate(file.id)}
-                          disabled={autoTagMutation.isPending}
-                          className="h-6 px-2 text-xs shrink-0"
-                          data-testid={`button-autotag-${file.id}`}
-                        >
-                          {autoTagMutation.isPending && autoTagMutation.variables === file.id
-                            ? <Loader2 className="w-3 h-3 animate-spin" />
-                            : <><Sparkles className="w-3 h-3 mr-1" />AI Tag</>
-                          }
-                        </Button>
-                      </div>
-                    ))}
-                    {filesQuery.data.length > 8 && (
-                      <p className="text-xs text-center text-muted-foreground pt-1">+{filesQuery.data.length - 8} file khác trong Kho Tri Thức</p>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* 5. Thống kê Kho Tri Thức */}
+            {/* 4. Thống kê */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-3">
@@ -521,7 +784,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <CardTitle className="text-base">Thống kê Kho Tri Thức</CardTitle>
-                    <CardDescription className="text-xs">Phân tích tổng quan dữ liệu AI đang sử dụng</CardDescription>
+                    <CardDescription className="text-xs">Phân tích tổng quan dữ liệu AI</CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -530,9 +793,18 @@ export default function Settings() {
                   <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40">
-                      <span className="text-sm font-medium">Tổng Files</span>
-                      <span className="text-2xl font-bold text-primary">{statsQuery.data?.total || 0}</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {[
+                        { label: "Files", value: statsQuery.data?.total || 0 },
+                        { label: "Danh mục", value: statsQuery.data?.categories || 0 },
+                        { label: "Tags", value: statsQuery.data?.totalTags || 0 },
+                        { label: "Chunks", value: statsQuery.data?.vectorChunks || 0 },
+                      ].map(s => (
+                        <div key={s.label} className="text-center p-3 rounded-xl bg-muted/40">
+                          <p className="text-2xl font-bold text-primary">{s.value}</p>
+                          <p className="text-xs text-muted-foreground">{s.label}</p>
+                        </div>
+                      ))}
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground mb-2 font-medium">Theo loại file</p>
@@ -548,23 +820,18 @@ export default function Settings() {
                         ))}
                       </div>
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-2 font-medium">Theo nguồn</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {Object.entries(statsQuery.data?.bySource || {}).map(([source, count]) => (
-                          <div key={source} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/30 border border-border/40">
-                            <span className="text-xs capitalize font-medium">{source === 'drive' ? '📁 Drive' : '⬆️ Upload'}</span>
-                            <span className="text-sm font-bold">{count}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                    {statsQuery.data?.indexedAt && (
+                      <p className="text-xs text-muted-foreground text-center">
+                        Lần cập nhật AI Index gần nhất: {formatRelative(statsQuery.data.indexedAt)}
+                      </p>
+                    )}
                   </div>
                 )}
               </CardContent>
             </Card>
           </TabsContent>
 
+          {/* ===== PAYMENT TAB ===== */}
           <TabsContent value="payment" className="space-y-5 mt-0">
             <Card className="border-border/50">
               <CardHeader className="pb-3">
@@ -589,77 +856,202 @@ export default function Settings() {
   );
 }
 
-function FileRowWithTags({
-  file, onDelete, onAutoTag, onUpdateTags, isDeleting, isAutoTagging
+// ===== KNOWLEDGE FILE ROW =====
+function KnowledgeFileRow({
+  file, categories, onDelete, onAutoTag, onUpdateAiTags, onUpdateManualTags, onSetCategory, isDeleting, isAutoTagging
 }: {
   file: KnowledgeFile;
+  categories: KnowledgeCategory[];
   onDelete: () => void;
   onAutoTag: () => void;
-  onUpdateTags: (tags: string[]) => void;
+  onUpdateAiTags: (tags: string[]) => void;
+  onUpdateManualTags: (tags: string[]) => void;
+  onSetCategory: (categoryId: number | null) => void;
   isDeleting: boolean;
   isAutoTagging: boolean;
 }) {
-  const [addingTag, setAddingTag] = useState(false);
-  const [newTag, setNewTag] = useState("");
-  const tags = file.tags || [];
+  const [expanded, setExpanded] = useState(false);
+  const [addingManualTag, setAddingManualTag] = useState(false);
+  const [newManualTag, setNewManualTag] = useState("");
+  const [showCategorySelect, setShowCategorySelect] = useState(false);
 
-  const handleAddTag = () => {
-    const trimmed = newTag.trim();
-    if (trimmed && !tags.includes(trimmed)) {
-      onUpdateTags([...tags, trimmed]);
+  const aiTags = file.tags || [];
+  const manualTags = file.tagsManual || [];
+  const sourceMeta = SOURCE_LABELS[file.source] || { label: file.source, color: "bg-gray-100 text-gray-600" };
+  const category = categories.find(c => c.id === file.categoryId);
+
+  const handleAddManualTag = () => {
+    const t = newManualTag.trim();
+    if (t && !manualTags.includes(t)) {
+      onUpdateManualTags([...manualTags, t]);
     }
-    setNewTag("");
-    setAddingTag(false);
+    setNewManualTag("");
+    setAddingManualTag(false);
   };
 
   return (
-    <div className="p-2.5 rounded-lg border border-border/50 hover:bg-muted/30 transition-colors" data-testid={`row-knowledge-file-${file.id}`}>
-      <div className="flex items-center justify-between gap-2 mb-1.5">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <FileText className="w-4 h-4 text-blue-500 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium truncate">{file.originalName}</p>
-            <p className="text-xs text-muted-foreground">{file.fileType.toUpperCase()} • {formatFileSize(file.fileSize)} • {new Date(file.createdAt).toLocaleDateString("vi-VN")} • {file.source === 'drive' ? '📁 Drive' : '⬆️ Upload'}</p>
+    <div className={`rounded-lg border ${file.pendingUpdate ? "border-amber-300/60 bg-amber-500/5" : "border-border/50"} transition-colors`} data-testid={`row-knowledge-file-${file.id}`}>
+      {/* Main row */}
+      <div className="flex items-center gap-2 p-2.5">
+        <button onClick={() => setExpanded(!expanded)} className="shrink-0 text-muted-foreground hover:text-foreground transition-colors">
+          {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+        </button>
+
+        {/* File icon + name */}
+        <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-medium truncate max-w-[200px] sm:max-w-none">{file.originalName}</span>
+            {/* Type badge */}
+            <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground uppercase font-mono shrink-0">{file.fileType}</span>
+            {/* Source badge */}
+            <span className={`text-xs px-1.5 py-0.5 rounded-full shrink-0 ${sourceMeta.color}`}>{sourceMeta.label}</span>
+            {/* Pending badge */}
+            {file.pendingUpdate ? (
+              <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 shrink-0">Chờ cập nhật</span>
+            ) : null}
           </div>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            <span className="text-xs text-muted-foreground">{formatFileSize(file.fileSize)}</span>
+            <span className="text-muted-foreground">·</span>
+            {/* Category */}
+            {category ? (
+              <button
+                onClick={() => setShowCategorySelect(!showCategorySelect)}
+                className="text-xs text-orange-600 dark:text-orange-400 flex items-center gap-0.5 hover:underline"
+                data-testid={`button-category-${file.id}`}
+              >
+                <Folder className="w-3 h-3" />{category.name}
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowCategorySelect(!showCategorySelect)}
+                className="text-xs text-muted-foreground hover:text-orange-500 flex items-center gap-0.5 transition-colors"
+                data-testid={`button-assign-category-${file.id}`}
+              >
+                <Folder className="w-3 h-3" />Gán danh mục
+              </button>
+            )}
+            <span className="text-muted-foreground">·</span>
+            <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+              <Clock className="w-3 h-3" />{formatRelative(file.lastUpdated)}
+            </span>
+            {/* Quick tags preview */}
+            {!expanded && (aiTags.length > 0 || manualTags.length > 0) && (
+              <>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-xs text-muted-foreground">{aiTags.length + manualTags.length} tags</span>
+              </>
+            )}
+          </div>
+
+          {/* Category dropdown */}
+          {showCategorySelect && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              <button
+                onClick={() => { onSetCategory(null); setShowCategorySelect(false); }}
+                className="text-xs px-2 py-0.5 rounded border border-border hover:bg-muted transition-colors"
+              >
+                Bỏ danh mục
+              </button>
+              {categories.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => { onSetCategory(cat.id); setShowCategorySelect(false); }}
+                  className={`text-xs px-2 py-0.5 rounded border transition-colors ${file.categoryId === cat.id ? "border-orange-400 bg-orange-500/10 text-orange-600" : "border-border hover:bg-muted"}`}
+                  data-testid={`button-set-cat-${cat.id}-file-${file.id}`}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <Button variant="ghost" size="sm" onClick={onAutoTag} disabled={isAutoTagging} className="h-6 px-2 text-xs" data-testid={`button-autotag-${file.id}`}>
-            {isAutoTagging ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Sparkles className="w-3 h-3 mr-1 text-purple-500" />AI</>}
+
+        {/* Actions */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          <Button
+            variant="ghost" size="sm"
+            onClick={onAutoTag}
+            disabled={isAutoTagging}
+            className="h-6 px-2 text-xs"
+            data-testid={`button-autotag-${file.id}`}
+          >
+            {isAutoTagging ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 text-purple-500" />}
           </Button>
-          <Button variant="ghost" size="icon" onClick={onDelete} disabled={isDeleting} className="h-6 w-6" data-testid={`button-delete-file-${file.id}`}>
+          <Button
+            variant="ghost" size="icon"
+            onClick={onDelete}
+            disabled={isDeleting}
+            className="h-6 w-6"
+            data-testid={`button-delete-file-${file.id}`}
+          >
             <Trash2 className="w-3 h-3 text-destructive" />
           </Button>
         </div>
       </div>
-      <div className="flex flex-wrap gap-1 pl-6">
-        {tags.map((tag, i) => (
-          <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs bg-purple-500/10 text-purple-600 dark:text-purple-400">
-            {tag}
-            <button onClick={() => onUpdateTags(tags.filter((_, idx) => idx !== i))} className="hover:text-destructive">
-              <X className="w-2.5 h-2.5" />
-            </button>
-          </span>
-        ))}
-        {addingTag ? (
-          <div className="flex items-center gap-1">
-            <input
-              autoFocus
-              value={newTag}
-              onChange={(e) => setNewTag(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") handleAddTag(); if (e.key === "Escape") setAddingTag(false); }}
-              onBlur={() => { if (newTag.trim()) handleAddTag(); else setAddingTag(false); }}
-              className="w-20 text-xs border border-purple-300 rounded-full px-2 py-0.5 outline-none focus:ring-1 focus:ring-purple-400"
-              placeholder="Tag..."
-              data-testid={`input-new-tag-${file.id}`}
-            />
+
+      {/* Expanded: Tags */}
+      {expanded && (
+        <div className="px-3 pb-3 border-t border-border/30 pt-2 space-y-2">
+          {/* AI Tags */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-purple-400" />AI Tags
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {aiTags.map((tag, i) => (
+                <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                  {tag}
+                  <button onClick={() => onUpdateAiTags(aiTags.filter((_, idx) => idx !== i))} className="hover:text-destructive">
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </span>
+              ))}
+              {aiTags.length === 0 && (
+                <span className="text-xs text-muted-foreground italic">Chưa có AI tag</span>
+              )}
+            </div>
           </div>
-        ) : (
-          <button onClick={() => setAddingTag(true)} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border border-dashed border-muted-foreground/40 text-muted-foreground hover:border-purple-400 hover:text-purple-500 transition-colors" data-testid={`button-add-tag-${file.id}`}>
-            <Plus className="w-2.5 h-2.5" />
-            Tag
-          </button>
-        )}
-      </div>
+
+          {/* Manual Tags */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+              <Tag className="w-3 h-3 text-blue-400" />Tags thủ công
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {manualTags.map((tag, i) => (
+                <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                  {tag}
+                  <button onClick={() => onUpdateManualTags(manualTags.filter((_, idx) => idx !== i))} className="hover:text-destructive">
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </span>
+              ))}
+              {addingManualTag ? (
+                <input
+                  autoFocus
+                  value={newManualTag}
+                  onChange={(e) => setNewManualTag(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleAddManualTag(); if (e.key === "Escape") setAddingManualTag(false); }}
+                  onBlur={() => { if (newManualTag.trim()) handleAddManualTag(); else setAddingManualTag(false); }}
+                  className="w-20 text-xs border border-blue-300 rounded-full px-2 py-0.5 outline-none focus:ring-1 focus:ring-blue-400 bg-transparent"
+                  placeholder="Tag..."
+                  data-testid={`input-manual-tag-${file.id}`}
+                />
+              ) : (
+                <button
+                  onClick={() => setAddingManualTag(true)}
+                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border border-dashed border-blue-300 text-blue-400 hover:border-blue-500 hover:text-blue-600 transition-colors"
+                  data-testid={`button-add-manual-tag-${file.id}`}
+                >
+                  <Plus className="w-2.5 h-2.5" />Tag
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -746,10 +1138,7 @@ function DriveOcrProcessor() {
 
       {isRunning && progress.total > 0 && (
         <div className="w-full bg-muted rounded-full h-2">
-          <div
-            className="bg-orange-500 h-2 rounded-full transition-all duration-500"
-            style={{ width: `${pct}%` }}
-          />
+          <div className="bg-orange-500 h-2 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
         </div>
       )}
 
@@ -791,13 +1180,11 @@ function DriveLinksLearner() {
       toast({ title: "Lỗi", description: "Vui lòng nhập Drive link", variant: "destructive" });
       return;
     }
-
     const fileIdMatch = link.match(/\/d\/([a-zA-Z0-9-_]+)/);
     if (!fileIdMatch) {
       toast({ title: "Lỗi", description: "Link không hợp lệ. Dùng Google Drive share link", variant: "destructive" });
       return;
     }
-
     setIsLoading(true);
     try {
       const res = await apiRequest("POST", "/api/knowledge-files/from-drive", {
@@ -820,55 +1207,29 @@ function DriveLinksLearner() {
   const driveFiles = filesQuery.data?.filter(f => f.fileType === "drive") || [];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex gap-2">
         <Input
-          placeholder="Dán Google Drive link (https://drive.google.com/file/d/...)"
+          placeholder="Google Drive link (https://drive.google.com/file/d/...)"
           value={driveLink}
           onChange={(e) => setDriveLink(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleAddDriveLink()}
           disabled={isLoading}
+          className="text-sm"
           data-testid="input-drive-link"
         />
         <Button
           onClick={handleAddDriveLink}
           disabled={isLoading || !driveLink.trim()}
-          className="gap-2"
+          className="gap-2 shrink-0"
           data-testid="button-add-drive-link"
         >
-          {isLoading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <LinkIcon className="w-4 h-4" />
-          )}
-          {isLoading ? "Đang thêm..." : "Thêm"}
+          {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LinkIcon className="w-4 h-4" />}
+          Thêm
         </Button>
       </div>
-
       {driveFiles.length > 0 && (
-        <div className="bg-green-500/5 border border-green-200 rounded-lg p-3">
-          <p className="text-sm text-foreground">
-            AI đang học từ <span className="font-bold text-green-600">{driveFiles.length}</span> file Drive
-          </p>
-        </div>
-      )}
-
-      {driveFiles.length > 0 && (
-        <div className="space-y-2 max-h-40 overflow-y-auto">
-          {driveFiles.map((file) => (
-            <div
-              key={file.id}
-              className="flex items-center justify-between p-2 rounded-lg bg-muted/50 text-xs"
-              data-testid={`row-drive-file-${file.id}`}
-            >
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <LinkIcon className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
-                <span className="truncate">{file.originalName}</span>
-              </div>
-              <span className="text-muted-foreground flex-shrink-0">{formatFileSize(file.fileSize)}</span>
-            </div>
-          ))}
-        </div>
+        <p className="text-xs text-green-600 font-medium">AI đang học từ {driveFiles.length} file Drive</p>
       )}
     </div>
   );
@@ -888,7 +1249,7 @@ function TemplatesComponent() {
   }, []);
 
   const handleLearn = (name: string) => {
-    const updated = learned.includes(name) 
+    const updated = learned.includes(name)
       ? learned.filter(t => t !== name)
       : [...learned, name];
     setLearned(updated);
@@ -896,47 +1257,37 @@ function TemplatesComponent() {
   };
 
   if (templatesQuery.isLoading) {
-    return <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
+    return <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>;
   }
 
-  const templates = templatesQuery.data || [];
-  const learningCount = templates.filter(t => learned.includes(t.name)).length;
+  if (!templatesQuery.data || templatesQuery.data.length === 0) {
+    return (
+      <div className="text-center py-4 text-muted-foreground">
+        <BookOpen className="w-8 h-8 mx-auto mb-2 opacity-30" />
+        <p className="text-xs">Chưa có mẫu nào trong Drive</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-4">
-      <div className="bg-blue-500/5 border border-blue-200 rounded-lg p-4">
-        <p className="text-sm text-foreground">
-          Đã học: <span className="font-bold text-blue-600">{learningCount}/{templates.length}</span> mẫu
-        </p>
-      </div>
-      
-      {templates.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
-          <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p>Chưa có mẫu nào trong thư viện</p>
+    <div className="space-y-2 max-h-48 overflow-y-auto">
+      {templatesQuery.data.map((template: any) => (
+        <div key={template.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50" data-testid={`row-template-${template.id}`}>
+          <div className="flex items-center gap-2 min-w-0">
+            <FileText className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+            <span className="text-xs truncate">{template.name}</span>
+          </div>
+          <Button
+            variant={learned.includes(template.name) ? "default" : "ghost"}
+            size="sm"
+            onClick={() => handleLearn(template.name)}
+            className="h-6 px-2 text-xs shrink-0"
+            data-testid={`button-learn-template-${template.id}`}
+          >
+            {learned.includes(template.name) ? "Đã học" : "Học"}
+          </Button>
         </div>
-      ) : (
-        <div className="grid gap-2">
-          {templates.slice(0, 15).map((template) => (
-            <div key={template.name} className="flex items-center justify-between p-3 rounded-lg border border-border/50 hover:bg-muted/50 transition-colors">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{template.name}</p>
-                <p className="text-xs text-muted-foreground">{template.mimeType || "File"}</p>
-              </div>
-              <Button
-                size="sm"
-                variant={learned.includes(template.name) ? "default" : "outline"}
-                onClick={() => handleLearn(template.name)}
-                className="gap-2 ml-2 flex-shrink-0"
-                data-testid={`button-learn-template-${template.name}`}
-              >
-                {learned.includes(template.name) ? "✓ Đã học" : "Học"}
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
-      <p className="text-xs text-muted-foreground">AI sẽ tham khảo các mẫu đã chọn trong các bước xử lý</p>
+      ))}
     </div>
   );
 }
@@ -944,9 +1295,13 @@ function TemplatesComponent() {
 function StripeProducts() {
   const { toast } = useToast();
 
+  const publishableKeyQuery = useQuery<{ publishableKey: string }>({
+    queryKey: ["/api/stripe/publishable-key"],
+  });
+
   const productsQuery = useQuery<any[]>({
     queryKey: ["/api/stripe/products"],
-    retry: false,
+    enabled: !!publishableKeyQuery.data?.publishableKey,
   });
 
   const checkoutMutation = useMutation({
@@ -954,51 +1309,41 @@ function StripeProducts() {
       const res = await apiRequest("POST", "/api/stripe/checkout", { priceId });
       return res.json();
     },
-    onSuccess: (data: { url: string }) => {
+    onSuccess: (data) => {
       if (data.url) window.location.href = data.url;
     },
     onError: () => {
-      toast({ title: "Lỗi", description: "Không thể tạo phiên thanh toán", variant: "destructive" });
+      toast({ title: "Lỗi", description: "Không thể tạo checkout session", variant: "destructive" });
     },
   });
 
-  if (productsQuery.isLoading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+  if (productsQuery.isLoading || publishableKeyQuery.isLoading) {
+    return <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
   }
 
-  if (productsQuery.isError || !productsQuery.data || productsQuery.data.length === 0) {
+  if (!productsQuery.data || productsQuery.data.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
-        <CreditCard className="w-12 h-12 mx-auto mb-3 opacity-30" />
-        <p>Chưa có gói dịch vụ nào</p>
-        <p className="text-sm mt-1">Các gói dịch vụ sẽ hiển thị tại đây khi được cấu hình</p>
+        <CreditCard className="w-10 h-10 mx-auto mb-3 opacity-30" />
+        <p className="text-sm">Chưa có gói dịch vụ nào</p>
       </div>
     );
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="grid gap-3 sm:grid-cols-2">
       {productsQuery.data.map((product: any) => {
         const price = product.default_price;
-        const amount = price?.unit_amount ? (price.unit_amount / 100).toLocaleString("vi-VN") : "—";
-        const currency = price?.currency?.toUpperCase() || "VND";
+        const amount = price?.unit_amount ? price.unit_amount / 100 : 0;
+        const currency = price?.currency?.toUpperCase() || "USD";
         return (
-          <div
-            key={product.id}
-            className="p-4 rounded-xl border border-border/50 hover:border-primary/30 transition-colors"
-            data-testid={`card-product-${product.id}`}
-          >
-            <h3 className="font-semibold text-foreground">{product.name}</h3>
-            {product.description && (
-              <p className="text-sm text-muted-foreground mt-1">{product.description}</p>
-            )}
+          <div key={product.id} className="p-4 rounded-xl border border-border/50 hover:border-primary/40 transition-colors" data-testid={`card-product-${product.id}`}>
+            <h3 className="font-semibold text-sm">{product.name}</h3>
+            {product.description && <p className="text-xs text-muted-foreground mt-1">{product.description}</p>}
             <div className="mt-3 flex items-center justify-between">
-              <span className="text-lg font-bold text-primary">
-                {amount} {currency}
+              <span className="font-bold text-primary">
+                {amount.toLocaleString()} {currency}
+                {price?.recurring && <span className="text-xs font-normal text-muted-foreground">/{price.recurring.interval}</span>}
               </span>
               {price?.id && (
                 <Button
@@ -1007,11 +1352,7 @@ function StripeProducts() {
                   disabled={checkoutMutation.isPending}
                   data-testid={`button-checkout-${product.id}`}
                 >
-                  {checkoutMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    "Mua ngay"
-                  )}
+                  {checkoutMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Mua ngay"}
                 </Button>
               )}
             </div>

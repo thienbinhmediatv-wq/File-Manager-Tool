@@ -46,8 +46,19 @@ export const projects = pgTable("projects", {
 export const aiSettings = pgTable("ai_settings", {
   id: serial("id").primaryKey(),
   instructions: text("instructions").notNull().default(""),
+  indexedAt: timestamp("indexed_at"),
+  pendingReindex: integer("pending_reindex").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const knowledgeCategories = pgTable("knowledge_categories", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  parentId: integer("parent_id"),
+  icon: text("icon").default("folder"),
+  color: text("color").default("orange"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const knowledgeFiles = pgTable("knowledge_files", {
@@ -58,15 +69,25 @@ export const knowledgeFiles = pgTable("knowledge_files", {
   fileType: text("file_type").notNull().default("text"),
   fileSize: integer("file_size").notNull().default(0),
   tags: text("tags").array().default([]),
+  tagsManual: text("tags_manual").array().default([]),
+  categoryId: integer("category_id"),
   source: text("source").notNull().default("upload"),
+  pendingUpdate: integer("pending_update").default(0),
+  lastUpdated: timestamp("last_updated").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export type AiSettings = typeof aiSettings.$inferSelect;
 export type KnowledgeFile = typeof knowledgeFiles.$inferSelect;
+export type KnowledgeCategory = typeof knowledgeCategories.$inferSelect;
 export type DriveFolder = typeof driveFolders.$inferSelect;
 
 export const insertDriveFolderSchema = createInsertSchema(driveFolders).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertKnowledgeCategorySchema = createInsertSchema(knowledgeCategories).omit({
   id: true,
   createdAt: true,
 });

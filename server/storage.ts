@@ -3,14 +3,16 @@ import {
   projects,
   aiSettings,
   knowledgeFiles,
+  knowledgeCategories,
   driveFolders,
   type Project,
   type InsertProject,
   type AiSettings,
   type KnowledgeFile,
+  type KnowledgeCategory,
   type DriveFolder,
 } from "@shared/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 
 export type ProjectSummary = Pick<Project, "id" | "title" | "clientName" | "landWidth" | "landLength" | "floors" | "bedrooms" | "style" | "budget" | "currentStep" | "stepStatuses" | "status" | "createdAt">;
 
@@ -22,11 +24,18 @@ export interface IStorage {
   deleteProject(id: number): Promise<void>;
   getAiSettings(): Promise<AiSettings | undefined>;
   upsertAiSettings(instructions: string): Promise<AiSettings>;
+  setReindexStatus(pending: boolean, indexedAt?: Date): Promise<void>;
   getKnowledgeFiles(): Promise<KnowledgeFile[]>;
   getKnowledgeFile(id: number): Promise<KnowledgeFile | undefined>;
-  createKnowledgeFile(file: { name: string; originalName: string; content: string; fileType: string; fileSize: number; source?: string }): Promise<KnowledgeFile>;
+  createKnowledgeFile(file: { name: string; originalName: string; content: string; fileType: string; fileSize: number; source?: string; categoryId?: number }): Promise<KnowledgeFile>;
+  updateKnowledgeFile(id: number, updates: { tags?: string[]; tagsManual?: string[]; categoryId?: number | null; pendingUpdate?: number }): Promise<KnowledgeFile>;
   updateKnowledgeFileTags(id: number, tags: string[]): Promise<KnowledgeFile>;
   deleteKnowledgeFile(id: number): Promise<void>;
+  getKnowledgeCategories(): Promise<KnowledgeCategory[]>;
+  getKnowledgeCategory(id: number): Promise<KnowledgeCategory | undefined>;
+  createKnowledgeCategory(cat: { name: string; parentId?: number | null; icon?: string; color?: string }): Promise<KnowledgeCategory>;
+  updateKnowledgeCategory(id: number, updates: { name?: string; parentId?: number | null; icon?: string; color?: string }): Promise<KnowledgeCategory>;
+  deleteKnowledgeCategory(id: number): Promise<void>;
   getDriveFolders(): Promise<DriveFolder[]>;
   getDriveFolder(id: number): Promise<DriveFolder | undefined>;
   createDriveFolder(folder: { name: string; folderId: string }): Promise<DriveFolder>;
@@ -85,10 +94,19 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return updated;
     }
-    const [created] = await db.insert(aiSettings)
-      .values({ instructions })
-      .returning();
+    const [created] = await db.insert(aiSettings).values({ instructions }).returning();
     return created;
+  }
+
+  async setReindexStatus(pending: boolean, indexedAt?: Date): Promise<void> {
+    const existing = await this.getAiSettings();
+    const updates: any = { pendingReindex: pending ? 1 : 0 };
+    if (indexedAt) updates.indexedAt = indexedAt;
+    if (existing) {
+      await db.update(aiSettings).set(updates).where(eq(aiSettings.id, existing.id));
+    } else {
+      await db.insert(aiSettings).values({ instructions: "", pendingReindex: pending ? 1 : 0, indexedAt });
+    }
   }
 
   async getKnowledgeFiles(): Promise<KnowledgeFile[]> {
@@ -100,18 +118,57 @@ export class DatabaseStorage implements IStorage {
     return file;
   }
 
-  async createKnowledgeFile(file: { name: string; originalName: string; content: string; fileType: string; fileSize: number; source?: string }): Promise<KnowledgeFile> {
-    const [created] = await db.insert(knowledgeFiles).values({ ...file, source: file.source || "upload" }).returning();
+  async createKnowledgeFile(file: { name: string; originalName: string; content: string; fileType: string; fileSize: number; source?: string; categoryId?: number }): Promise<KnowledgeFile> {
+    const [created] = await db.insert(knowledgeFiles).values({
+      ...file,
+      source: file.source || "upload",
+      lastUpdated: new Date(),
+    }).returning();
     return created;
   }
 
+  async updateKnowledgeFile(id: number, updates: { tags?: string[]; tagsManual?: string[]; categoryId?: number | null; pendingUpdate?: number }): Promise<KnowledgeFile> {
+    const [updated] = await db.update(knowledgeFiles)
+      .set({ ...updates, lastUpdated: new Date() })
+      .where(eq(knowledgeFiles.id, id))
+      .returning();
+    return updated;
+  }
+
   async updateKnowledgeFileTags(id: number, tags: string[]): Promise<KnowledgeFile> {
-    const [updated] = await db.update(knowledgeFiles).set({ tags }).where(eq(knowledgeFiles.id, id)).returning();
+    const [updated] = await db.update(knowledgeFiles)
+      .set({ tags, lastUpdated: new Date(), pendingUpdate: 1 })
+      .where(eq(knowledgeFiles.id, id))
+      .returning();
     return updated;
   }
 
   async deleteKnowledgeFile(id: number): Promise<void> {
     await db.delete(knowledgeFiles).where(eq(knowledgeFiles.id, id));
+  }
+
+  async getKnowledgeCategories(): Promise<KnowledgeCategory[]> {
+    return await db.select().from(knowledgeCategories).orderBy(knowledgeCategories.name);
+  }
+
+  async getKnowledgeCategory(id: number): Promise<KnowledgeCategory | undefined> {
+    const [cat] = await db.select().from(knowledgeCategories).where(eq(knowledgeCategories.id, id));
+    return cat;
+  }
+
+  async createKnowledgeCategory(cat: { name: string; parentId?: number | null; icon?: string; color?: string }): Promise<KnowledgeCategory> {
+    const [created] = await db.insert(knowledgeCategories).values(cat).returning();
+    return created;
+  }
+
+  async updateKnowledgeCategory(id: number, updates: { name?: string; parentId?: number | null; icon?: string; color?: string }): Promise<KnowledgeCategory> {
+    const [updated] = await db.update(knowledgeCategories).set(updates).where(eq(knowledgeCategories.id, id)).returning();
+    return updated;
+  }
+
+  async deleteKnowledgeCategory(id: number): Promise<void> {
+    await db.update(knowledgeFiles).set({ categoryId: null }).where(eq(knowledgeFiles.categoryId, id));
+    await db.delete(knowledgeCategories).where(eq(knowledgeCategories.id, id));
   }
 
   async getDriveFolders(): Promise<DriveFolder[]> {
