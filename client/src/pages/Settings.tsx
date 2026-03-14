@@ -209,6 +209,7 @@ export default function Settings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
       queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
+      setSelectedCategoryId(null);
       toast({ title: "Đã tải lên", description: "File tri thức đã được thêm" });
     },
     onError: () => {
