@@ -153,9 +153,9 @@ export default function Settings() {
       const res = await apiRequest("PATCH", `/api/knowledge-files/${id}`, updates);
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
+    onSuccess: async () => {
+      await queryClient.refetchQueries({ queryKey: ["/api/knowledge-files"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/knowledge-stats"] });
     },
   });
 
@@ -164,9 +164,9 @@ export default function Settings() {
       const res = await apiRequest("PATCH", `/api/knowledge-files/${id}/tags`, { tags });
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
+    onSuccess: async () => {
+      await queryClient.refetchQueries({ queryKey: ["/api/knowledge-files"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/knowledge-stats"] });
     },
   });
 
@@ -175,9 +175,9 @@ export default function Settings() {
       const res = await apiRequest("POST", `/api/knowledge-files/${id}/auto-tag`);
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
+    onSuccess: async () => {
+      await queryClient.refetchQueries({ queryKey: ["/api/knowledge-files"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/knowledge-stats"] });
       toast({ title: "AI đã gắn tag", description: "Tags được tạo tự động bởi AI" });
     },
     onError: () => {
@@ -221,9 +221,9 @@ export default function Settings() {
     mutationFn: async (id: number) => {
       await apiRequest("DELETE", `/api/knowledge-files/${id}`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
+    onSuccess: async () => {
+      await queryClient.refetchQueries({ queryKey: ["/api/knowledge-files"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/knowledge-stats"] });
       toast({ title: "Đã xóa", description: "File tri thức đã được xóa" });
     },
     onError: () => {
@@ -236,9 +236,9 @@ export default function Settings() {
       const res = await apiRequest("POST", "/api/knowledge-categories", { name });
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-categories"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
+    onSuccess: async () => {
+      await queryClient.refetchQueries({ queryKey: ["/api/knowledge-categories"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/knowledge-stats"] });
       setNewCatName("");
       setAddingCat(false);
     },
@@ -251,10 +251,10 @@ export default function Settings() {
     mutationFn: async (id: number) => {
       await apiRequest("DELETE", `/api/knowledge-categories/${id}`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-categories"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
+    onSuccess: async () => {
+      await queryClient.refetchQueries({ queryKey: ["/api/knowledge-categories"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/knowledge-files"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/knowledge-stats"] });
     },
   });
 
@@ -264,9 +264,9 @@ export default function Settings() {
         apiRequest("PATCH", `/api/knowledge-files/${id}`, { categoryId })
       ));
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
+    onSuccess: async () => {
+      await queryClient.refetchQueries({ queryKey: ["/api/knowledge-files"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/knowledge-stats"] });
       setSelectedFilesForCategory([]);
       toast({ title: "Thành công", description: "Đã thêm files vào danh mục" });
     },
@@ -279,9 +279,9 @@ export default function Settings() {
     mutationFn: async ({ fileId, categoryId }: { fileId: number; categoryId: number | null }) => {
       await apiRequest("PATCH", `/api/knowledge-files/${fileId}`, { categoryId });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
+    onSuccess: async () => {
+      await queryClient.refetchQueries({ queryKey: ["/api/knowledge-files"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/knowledge-stats"] });
       toast({ title: "Thành công", description: "Đã di chuyển file" });
       setDraggedFileId(null);
       setDragOverCategoryId(null);
