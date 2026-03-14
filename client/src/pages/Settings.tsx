@@ -209,14 +209,40 @@ export default function Settings() {
           </TabsList>
 
           <TabsContent value="knowledge" className="space-y-5 mt-0">
+            {/* Header */}
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-foreground">Kho Tri Thức AI</h2>
+              <p className="text-sm text-muted-foreground mt-1">Quản lý AI Instructions via file tri thức</p>
+            </div>
+
+            {/* Upload Section - Prominent */}
+            <Card className="border-primary/20 bg-primary/5">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shrink-0">
+                    <Upload className="w-4 h-4 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <CardTitle className="text-base">Upload Tri Thức</CardTitle>
+                    <CardDescription className="text-xs">Hỗ trợ: TXT • MD • JSON • PDF (tối đa 5MB)</CardDescription>
+                  </div>
+                  <Button onClick={handleFileUpload} disabled={uploadMutation.isPending} className="gap-2" data-testid="button-upload-knowledge">
+                    {uploadMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    <span className="hidden sm:inline">Upload File</span>
+                  </Button>
+                </div>
+              </CardHeader>
+            </Card>
+
+            {/* Google Drive Section */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
                     <LinkIcon className="w-4 h-4 text-orange-500" />
                   </div>
-                  <div>
-                    <CardTitle className="text-base">Học từ Drive Links</CardTitle>
+                  <div className="flex-1">
+                    <CardTitle className="text-base">Học từ Google Drive Links</CardTitle>
                     <CardDescription className="text-xs">Paste Drive link để AI tham khảo trực tiếp</CardDescription>
                   </div>
                 </div>
@@ -226,56 +252,17 @@ export default function Settings() {
               </CardContent>
             </Card>
 
+            {/* File Tri Thức - File List */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-                    <BookOpen className="w-4 h-4 text-blue-500" />
+                    <FileText className="w-4 h-4 text-blue-500" />
                   </div>
                   <div>
-                    <CardTitle className="text-base">Thư viện Mẫu</CardTitle>
-                    <CardDescription className="text-xs">Học từ các mẫu thiết kế trong Drive</CardDescription>
+                    <CardTitle className="text-base">File Tri Thức ({filesQuery.data?.length || 0})</CardTitle>
+                    <CardDescription className="text-xs">Danh sách file đã tải lên</CardDescription>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <TemplatesComponent />
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/50">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                    <Database className="w-4 h-4 text-primary" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base">Xử lý tri thức từ Drive (OCR)</CardTitle>
-                    <CardDescription className="text-xs">Trích xuất text từ PDF, DOCX trong Google Drive → lưu vào kho tri thức AI</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <DriveOcrProcessor />
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/50">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-                      <FileText className="w-4 h-4 text-blue-500" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-base">File tri thức</CardTitle>
-                      <CardDescription className="text-xs">Upload file văn bản để AI tham khảo. Hỗ trợ .txt, .md, .csv, .json (tối đa 5MB)</CardDescription>
-                    </div>
-                  </div>
-                  <Button onClick={handleFileUpload} disabled={uploadMutation.isPending} variant="outline" size="sm" data-testid="button-upload-knowledge">
-                    {uploadMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                    <span className="ml-1.5 hidden sm:inline">Tải lên</span>
-                  </Button>
                 </div>
               </CardHeader>
               <CardContent>
@@ -291,15 +278,15 @@ export default function Settings() {
                 ) : (
                   <div className="space-y-1.5">
                     {filesQuery.data.map((file) => (
-                      <div key={file.id} className="flex items-center justify-between p-2.5 rounded-lg border border-border/50 hover:bg-muted/50 transition-colors" data-testid={`row-knowledge-file-${file.id}`}>
-                        <div className="flex items-center gap-2.5 min-w-0">
+                      <div key={file.id} className="flex items-center justify-between p-2.5 rounded-lg border border-border/50 hover:bg-muted/50 transition-colors group" data-testid={`row-knowledge-file-${file.id}`}>
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
                           <FileText className="w-4 h-4 text-blue-500 shrink-0" />
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <p className="text-xs font-medium truncate">{file.originalName}</p>
-                            <p className="text-xs text-muted-foreground">{file.fileType} • {formatFileSize(file.fileSize)} • {new Date(file.createdAt).toLocaleDateString("vi-VN")}</p>
+                            <p className="text-xs text-muted-foreground">{file.fileType.toUpperCase()} • {formatFileSize(file.fileSize)} • {new Date(file.createdAt).toLocaleDateString("vi-VN")}</p>
                           </div>
                         </div>
-                        <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(file.id)} disabled={deleteMutation.isPending} className="h-7 w-7 shrink-0" data-testid={`button-delete-file-${file.id}`}>
+                        <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(file.id)} disabled={deleteMutation.isPending} className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" data-testid={`button-delete-file-${file.id}`}>
                           <Trash2 className="w-3.5 h-3.5 text-destructive" />
                         </Button>
                       </div>
@@ -308,6 +295,43 @@ export default function Settings() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Templates & OCR - Compact */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Card className="border-border/50">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                      <BookOpen className="w-4 h-4 text-blue-500" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-sm">Thư viện Mẫu</CardTitle>
+                      <CardDescription className="text-xs">Mẫu trong Drive</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <TemplatesComponent />
+                </CardContent>
+              </Card>
+
+              <Card className="border-border/50">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <Database className="w-4 h-4 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-sm">Xử lý OCR</CardTitle>
+                      <CardDescription className="text-xs">Trích PDF → tri thức</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <DriveOcrProcessor />
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="ai" className="space-y-5 mt-0">
