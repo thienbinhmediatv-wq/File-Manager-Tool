@@ -95,6 +95,8 @@ export default function Settings() {
   const [selectedFilesForCategory, setSelectedFilesForCategory] = useState<number[]>([]);
   const [expandedFilesSection, setExpandedFilesSection] = useState(true);
   const [selectedFileToView, setSelectedFileToView] = useState<KnowledgeFile | null>(null);
+  const [draggedFileId, setDraggedFileId] = useState<number | null>(null);
+  const [dragOverCategoryId, setDragOverCategoryId] = useState<number | null>(null);
 
   const handleVerifyPassword = async () => {
     setIsVerifying(true);
@@ -264,11 +266,28 @@ export default function Settings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
       queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
-      setSelectedFilesForCategory(new Set());
+      setSelectedFilesForCategory([]);
       toast({ title: "Thành công", description: "Đã thêm files vào danh mục" });
     },
     onError: () => {
       toast({ title: "Lỗi", description: "Không thể thêm files vào danh mục", variant: "destructive" });
+    },
+  });
+
+  const moveFileMutation = useMutation({
+    mutationFn: async ({ fileId, categoryId }: { fileId: number; categoryId: number | null }) => {
+      await apiRequest("PATCH", `/api/knowledge-files/${fileId}`, { categoryId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
+      toast({ title: "Thành công", description: "Đã di chuyển file" });
+      setDraggedFileId(null);
+      setDragOverCategoryId(null);
+    },
+    onError: () => {
+      toast({ title: "Lỗi", description: "Không thể di chuyển file", variant: "destructive" });
+      setDraggedFileId(null);
     },
   });
 
@@ -565,7 +584,22 @@ export default function Settings() {
 
                     {/* Categories */}
                     {categories.map((cat) => (
-                      <div key={cat.id} className="group">
+                      <div 
+                        key={cat.id} 
+                        className={`group rounded-lg transition-colors ${dragOverCategoryId === cat.id ? "bg-orange-100 dark:bg-orange-900/20" : ""}`}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setDragOverCategoryId(cat.id);
+                        }}
+                        onDragLeave={() => setDragOverCategoryId(null)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (draggedFileId !== null) {
+                            moveFileMutation.mutate({ fileId: draggedFileId, categoryId: cat.id });
+                          }
+                        }}
+                        data-testid={`drop-zone-cat-${cat.id}`}
+                      >
                         <div className={`flex items-center justify-between px-2 py-1.5 rounded-lg transition-colors ${selectedCategoryId === cat.id ? "bg-primary/10 text-primary" : "hover:bg-muted"}`}>
                           <button
                             onClick={() => setSelectedCategoryId(cat.id)}
@@ -667,6 +701,8 @@ export default function Settings() {
                           key={file.id}
                           file={file}
                           categories={categories}
+                          draggedFileId={draggedFileId}
+                          setDraggedFileId={setDraggedFileId}
                           onView={() => setSelectedFileToView(file)}
                           onDelete={() => deleteMutation.mutate(file.id)}
                           onAutoTag={() => autoTagMutation.mutate(file.id)}
@@ -1115,10 +1151,12 @@ export default function Settings() {
 
 // ===== KNOWLEDGE FILE ROW =====
 function KnowledgeFileRow({
-  file, categories, onView, onDelete, onAutoTag, onUpdateAiTags, onUpdateManualTags, onSetCategory, isDeleting, isAutoTagging
+  file, categories, draggedFileId, setDraggedFileId, onView, onDelete, onAutoTag, onUpdateAiTags, onUpdateManualTags, onSetCategory, isDeleting, isAutoTagging
 }: {
   file: KnowledgeFile;
   categories: KnowledgeCategory[];
+  draggedFileId: number | null;
+  setDraggedFileId: (id: number | null) => void;
   onView: () => void;
   onDelete: () => void;
   onAutoTag: () => void;
@@ -1148,9 +1186,15 @@ function KnowledgeFileRow({
   };
 
   return (
-    <div className={`rounded-lg border ${file.pendingUpdate ? "border-amber-300/60 bg-amber-500/5" : "border-border/50"} transition-colors`} data-testid={`row-knowledge-file-${file.id}`}>
+    <div 
+      className={`rounded-lg border ${file.pendingUpdate ? "border-amber-300/60 bg-amber-500/5" : "border-border/50"} transition-colors ${draggedFileId === file.id ? "opacity-50 bg-muted/50" : ""}`} 
+      data-testid={`row-knowledge-file-${file.id}`}
+      draggable
+      onDragStart={() => setDraggedFileId(file.id)}
+      onDragEnd={() => setDraggedFileId(null)}
+    >
       {/* Main row */}
-      <div className="flex items-center gap-2 p-2.5 cursor-pointer hover:bg-muted/30 transition-colors" onClick={onView}>
+      <div className="flex items-center gap-2 p-2.5 cursor-move hover:bg-muted/30 transition-colors" onClick={onView}>
         <button
           onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
           className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
