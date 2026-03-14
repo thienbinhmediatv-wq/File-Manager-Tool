@@ -92,6 +92,7 @@ export default function Settings() {
   const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set());
   const [newCatName, setNewCatName] = useState("");
   const [addingCat, setAddingCat] = useState(false);
+  const [selectedFilesForCategory, setSelectedFilesForCategory] = useState<Set<number>>(new Set());
 
   const handleVerifyPassword = async () => {
     setIsVerifying(true);
@@ -249,6 +250,23 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["/api/knowledge-categories"] });
       queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
       queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
+    },
+  });
+
+  const assignToCategoryMutation = useMutation({
+    mutationFn: async ({ categoryId, fileIds }: { categoryId: number; fileIds: number[] }) => {
+      await Promise.all(fileIds.map(id => 
+        apiRequest("PATCH", `/api/knowledge-files/${id}`, { categoryId })
+      ));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
+      setSelectedFilesForCategory(new Set());
+      toast({ title: "Thành công", description: "Đã thêm files vào danh mục" });
+    },
+    onError: () => {
+      toast({ title: "Lỗi", description: "Không thể thêm files vào danh mục", variant: "destructive" });
     },
   });
 
@@ -655,6 +673,82 @@ export default function Settings() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Assign Files to Category */}
+            {typeof selectedCategoryId === "number" && (
+              <Card className="border-orange-200/60 bg-orange-500/5">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
+                      <Plus className="w-4 h-4 text-orange-500" />
+                    </div>
+                    <div className="flex-1">
+                      <CardTitle className="text-base">Thêm Files vào "{categories.find(c => c.id === selectedCategoryId)?.name}"</CardTitle>
+                      <CardDescription className="text-xs">Chọn các file để thêm vào danh mục này</CardDescription>
+                    </div>
+                    <div className="text-xs text-muted-foreground font-medium">
+                      {selectedFilesForCategory.size} chọn
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {filesQuery.isLoading ? (
+                    <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+                  ) : (
+                    <>
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {allFiles
+                          .filter(f => f.categoryId !== selectedCategoryId)
+                          .map(file => (
+                            <label
+                              key={file.id}
+                              className="flex items-center gap-2 p-2.5 rounded-lg border border-border/50 hover:bg-muted/50 cursor-pointer transition-colors"
+                              data-testid={`checkbox-assign-file-${file.id}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedFilesForCategory.has(file.id)}
+                                onChange={(e) => {
+                                  const newSet = new Set(selectedFilesForCategory);
+                                  if (e.target.checked) newSet.add(file.id);
+                                  else newSet.delete(file.id);
+                                  setSelectedFilesForCategory(newSet);
+                                }}
+                                className="w-4 h-4 rounded cursor-pointer"
+                              />
+                              <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-medium truncate">{file.originalName}</p>
+                                <p className="text-xs text-muted-foreground">{file.fileType.toUpperCase()} • {formatFileSize(file.fileSize)}</p>
+                              </div>
+                            </label>
+                          ))}
+                        {allFiles.filter(f => f.categoryId !== selectedCategoryId).length === 0 && (
+                          <p className="text-center text-xs text-muted-foreground py-4">Tất cả files đều đã được gán hoặc không có files khác</p>
+                        )}
+                      </div>
+                      {selectedFilesForCategory.size > 0 && (
+                        <Button
+                          onClick={() => assignToCategoryMutation.mutate({
+                            categoryId: selectedCategoryId as number,
+                            fileIds: Array.from(selectedFilesForCategory)
+                          })}
+                          disabled={assignToCategoryMutation.isPending}
+                          className="w-full gap-2"
+                          data-testid="button-assign-files-to-category"
+                        >
+                          {assignToCategoryMutation.isPending ? (
+                            <><Loader2 className="w-4 h-4 animate-spin" />Đang thêm...</>
+                          ) : (
+                            <><Plus className="w-4 h-4" />Thêm {selectedFilesForCategory.size} file vào danh mục</>
+                          )}
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Templates & OCR */}
             <div className="grid gap-4 sm:grid-cols-2">
