@@ -1,0 +1,164 @@
+1. HỆ THỐNG PHÂN LOẠI TRI THỨC
+
+Thay đổi cấu trúc lưu file từ dạng danh sách phẳng sang dạng cây thư mục (Knowledge Categories).
+Cấu trúc ví dụ:
+Kho Tri Thức AI
+│
+├──▼ Kiến Thức AI
+│   ├──Cam_nang_Tu_duy_Du_an_Moi_Buoc3.md
+│   ├── Cam_nang_Tu_duy_Buoc5_Noi_that.md
+│   ├── Bosung_kienthuc.docx
+│   ├── bo_dac_ta_tool_ai_thiet_ke_....docx
+│   ├── .......
+│
+├── ▼ Quy Trình Thiết Kế
+│   ├── Input.md
+│   ├── Layout.md
+│   ├── Circulation.md
+│   ├── Ventilation.md
+│
+├── ▼ Thư Viện Bản Vẽ
+│   ├── Banve_2D
+│   ├── Banve_3D
+│   ├── Mẫu Kết QUẢ.pdf
+│
+├── ▼ Dự Án Mẫu
+│   ├── Mẫu Kết QUẢ.pdf
+│   ├── Mẫu Kết QUẢ_02.pdf
+│
+└── ▼ Quy Tắc Hệ Thống
+│   ├── NHACAP4_ERRORS.md
+│   ├── NHACAP4_ERRORS.md
+│   ├── NHACAP4_ERRORS.md
+│   ├── NHACAP4_ROOM_SIZE.md
+│   ├── NHACAP4_LAYOUT.md
+│   ├── NHACAP4_INPUT.md
+│   ├── NguyenTac.md
+│   ├──......
+Cho phép người dùng (Admin Bao@0206)
+- tạo thư mục tri thức
+- kéo thả file vào thư mục
+- đổi thư mục của file
+- mỗi file đều có tag AI
+
+---
+2. METADATA CHO MỖI FILE TRI THỨC
+Mỗi file phải có metadata như sau:
+
+{
+  "file_name": "",
+  "category": "",
+  "tags_ai": [],
+  "tags_manual": [],
+  "source": "",
+  "created_at": "",
+  "last_updated": ""
+}
+
+source có các giá trị:
+upload
+google_drive
+telegram_bot
+api_sync
+
+---
+3. TAG AI + TAG THỦ CÔNG
+Hiện tại tag được AI tự tạo.
+Thêm tính năng:
+Manual Tags ( Manual tag phải được ưu tiên khi AI tìm kiếm tri thức. )
+Người dùng có thể:
+- thêm tag
+- sửa tag
+- xoá tag
+User sửa tag
+↓
+Lưu metadata
+↓
+Trạng thái: "Pending Update"
+↓
+Người dùng bấm "Cập nhật AI"
+↓
+Reindex knowledge
+↓
+AI sử dụng tag mới
+
+---
+4. HIỂN THỊ NGUỒN DỮ LIỆU TRI THỨC
+Trong phần thống kê Kho Tri Thức, hiển thị rõ nguồn:
+Nguồn dữ liệu AI:
+Upload trực tiếp
+Google Drive
+Telegram Bot
+API Sync
+
+Ví dụ:
+- Upload: 84 files
+- Google Drive: 12 files
+- Telegram Bot: 6 files
+- API Sync: 3 files
+
+---
+5. HIỂN THỊ NGUỒN CẬP NHẬT CỦA FILE
+Trong danh sách file hiển thị thêm:
+Source
+Last Update
+Ví dụ:
+Mau3D_01.pdf
+PDF • 2.4MB
+Source: Google Drive
+Updated: 14/03/2026
+
+---
+6. TÍNH NĂNG REINDEX AI
+Thêm nút:
+Rebuild AI Index
+Chức năng:
+- khi upload file mới
+- khi chỉnh sửa file
+- khi thay đổi tag
+=> AI sẽ tạo lại vector index để học lại dữ liệu. 
+Mục đích định hướng AI học đúng hướng 
+Giúp AI học nhanh hơn
+Tìm file nhanh hơn (tránh trùng dữ liệu)
+ Giảm nhiễu tri thức ( AI không đọc nhầm tài liệu, áp dụng sai)
+
+---
+7. THỐNG KÊ KHO TRI THỨC
+• Dashboard phải hiển thị:
+Total Files
+Categories
+Total Tags
+Vector Chunks
+• Ví dụ:
+Files: 84
+Categories: 5
+Tags: 63
+Vectors: 840 chunks
+
+---
+8. GIAO DIỆN QUẢN LÝ FILE
+• Danh sách file hiển thị:
+File Name
+Type
+Size
+Category
+Tags
+Source
+Last Update
+
+---
+9. HỆ THỐNG TÌM KIẾM TRI THỨC
+• AI search phải ưu tiên theo thứ tự:
+Manual Tag
+Category
+AI Tag
+Semantic vector search
+
+---
+10. MỤC TIÊU
+Hệ thống kho tri thức phải giúp AI:
+- học nhanh hơn
+- tránh trùng dữ liệu
+- dễ tìm kiếm
+- dễ quản lý dữ liệu
+Thiết kế giao diện gọn, rõ ràng, tối ưu cho AI knowledge management.
