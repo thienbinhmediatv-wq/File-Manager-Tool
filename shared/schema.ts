@@ -57,6 +57,8 @@ export const knowledgeFiles = pgTable("knowledge_files", {
   content: text("content").notNull(),
   fileType: text("file_type").notNull().default("text"),
   fileSize: integer("file_size").notNull().default(0),
+  tags: text("tags").array().default([]),
+  source: text("source").notNull().default("upload"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

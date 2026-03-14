@@ -24,7 +24,8 @@ export interface IStorage {
   upsertAiSettings(instructions: string): Promise<AiSettings>;
   getKnowledgeFiles(): Promise<KnowledgeFile[]>;
   getKnowledgeFile(id: number): Promise<KnowledgeFile | undefined>;
-  createKnowledgeFile(file: { name: string; originalName: string; content: string; fileType: string; fileSize: number }): Promise<KnowledgeFile>;
+  createKnowledgeFile(file: { name: string; originalName: string; content: string; fileType: string; fileSize: number; source?: string }): Promise<KnowledgeFile>;
+  updateKnowledgeFileTags(id: number, tags: string[]): Promise<KnowledgeFile>;
   deleteKnowledgeFile(id: number): Promise<void>;
   getDriveFolders(): Promise<DriveFolder[]>;
   getDriveFolder(id: number): Promise<DriveFolder | undefined>;
@@ -99,9 +100,14 @@ export class DatabaseStorage implements IStorage {
     return file;
   }
 
-  async createKnowledgeFile(file: { name: string; originalName: string; content: string; fileType: string; fileSize: number }): Promise<KnowledgeFile> {
-    const [created] = await db.insert(knowledgeFiles).values(file).returning();
+  async createKnowledgeFile(file: { name: string; originalName: string; content: string; fileType: string; fileSize: number; source?: string }): Promise<KnowledgeFile> {
+    const [created] = await db.insert(knowledgeFiles).values({ ...file, source: file.source || "upload" }).returning();
     return created;
+  }
+
+  async updateKnowledgeFileTags(id: number, tags: string[]): Promise<KnowledgeFile> {
+    const [updated] = await db.update(knowledgeFiles).set({ tags }).where(eq(knowledgeFiles.id, id)).returning();
+    return updated;
   }
 
   async deleteKnowledgeFile(id: number): Promise<void> {

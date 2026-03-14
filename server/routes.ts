@@ -2138,6 +2138,8 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
         originalName: f.originalName,
         fileType: f.fileType,
         fileSize: f.fileSize,
+        tags: f.tags || [],
+        source: (f as any).source || "upload",
         createdAt: f.createdAt,
       })));
     } catch (err) {
@@ -2359,6 +2361,62 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
     } catch (err) {
       console.error("Delete knowledge file error:", err);
       res.status(500).json({ message: "Failed to delete file" });
+    }
+  });
+
+  app.patch("/api/knowledge-files/:id/tags", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      const { tags } = req.body;
+      if (!Array.isArray(tags)) return res.status(400).json({ message: "tags must be array" });
+      const updated = await storage.updateKnowledgeFileTags(id, tags);
+      res.json(updated);
+    } catch (err) {
+      console.error("Update tags error:", err);
+      res.status(500).json({ message: "Failed to update tags" });
+    }
+  });
+
+  app.post("/api/knowledge-files/:id/auto-tag", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      const file = await storage.getKnowledgeFile(id);
+      if (!file) return res.status(404).json({ message: "File not found" });
+      const aiSuggest = await aiChat([
+        { role: "system", content: "Bạn là AI phân loại tài liệu kiến trúc & nội thất. Phân tích nội dung và trả về 3-5 tag ngắn gọn bằng tiếng Việt. Chỉ trả về JSON array, ví dụ: [\"Nội thất\",\"3D\",\"Render\"]" },
+        { role: "user", content: `Tên file: ${file.originalName}\n\nNội dung (200 ký tự đầu):\n${file.content.slice(0, 200)}\n\nTạo tag phân loại:` }
+      ], 200);
+      let tags: string[] = [];
+      try {
+        const match = aiSuggest.match(/\[[\s\S]*?\]/);
+        tags = match ? JSON.parse(match[0]) : [];
+      } catch { tags = []; }
+      const updated = await storage.updateKnowledgeFileTags(id, tags);
+      res.json(updated);
+    } catch (err) {
+      console.error("Auto-tag error:", err);
+      res.status(500).json({ message: "Auto-tag failed" });
+    }
+  });
+
+  app.get("/api/knowledge-stats", async (_req, res) => {
+    try {
+      const files = await storage.getKnowledgeFiles();
+      const total = files.length;
+      const byType: Record<string, number> = {};
+      const bySource: Record<string, number> = {};
+      for (const f of files) {
+        const t = f.fileType?.toLowerCase() || "text";
+        byType[t] = (byType[t] || 0) + 1;
+        const s = (f as any).source || "upload";
+        bySource[s] = (bySource[s] || 0) + 1;
+      }
+      res.json({ total, byType, bySource });
+    } catch (err) {
+      console.error("Knowledge stats error:", err);
+      res.status(500).json({ message: "Failed to get stats" });
     }
   });
 

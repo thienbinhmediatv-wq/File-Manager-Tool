@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Save, Upload, Trash2, FileText, Brain, CreditCard, Loader2, AlertCircle, Lock, Eye, EyeOff, FolderSync, CheckCircle, XCircle, Database, BookOpen, Link as LinkIcon } from "lucide-react";
+import { Save, Upload, Trash2, FileText, Brain, CreditCard, Loader2, AlertCircle, Lock, Eye, EyeOff, FolderSync, CheckCircle, XCircle, Database, BookOpen, Link as LinkIcon, Tag, Sparkles, BarChart2, X, Plus } from "lucide-react";
 import { useRef } from "react";
 
 interface KnowledgeFile {
@@ -17,7 +17,15 @@ interface KnowledgeFile {
   originalName: string;
   fileType: string;
   fileSize: number;
+  tags: string[] | null;
+  source: string;
   createdAt: string;
+}
+
+interface KnowledgeStats {
+  total: number;
+  byType: Record<string, number>;
+  bySource: Record<string, number>;
 }
 
 function formatFileSize(bytes: number) {
@@ -72,6 +80,36 @@ export default function Settings() {
   const filesQuery = useQuery<KnowledgeFile[]>({
     queryKey: ["/api/knowledge-files"],
     enabled: isAuthenticated,
+  });
+
+  const statsQuery = useQuery<KnowledgeStats>({
+    queryKey: ["/api/knowledge-stats"],
+    enabled: isAuthenticated,
+  });
+
+  const updateTagsMutation = useMutation({
+    mutationFn: async ({ id, tags }: { id: number; tags: string[] }) => {
+      const res = await apiRequest("PATCH", `/api/knowledge-files/${id}/tags`, { tags });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
+    },
+  });
+
+  const autoTagMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("POST", `/api/knowledge-files/${id}/auto-tag`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-files"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-stats"] });
+      toast({ title: "AI đã gắn tag", description: "Tags được tạo tự động bởi AI" });
+    },
+    onError: () => {
+      toast({ title: "Lỗi", description: "Không thể tạo tag tự động", variant: "destructive" });
+    },
   });
 
   const saveMutation = useMutation({
@@ -252,16 +290,18 @@ export default function Settings() {
               </CardContent>
             </Card>
 
-            {/* File Tri Thức - File List */}
+            {/* File Tri Thức - File List with Tags */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-                    <FileText className="w-4 h-4 text-blue-500" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base">File Tri Thức ({filesQuery.data?.length || 0})</CardTitle>
-                    <CardDescription className="text-xs">Danh sách file đã tải lên</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                      <FileText className="w-4 h-4 text-blue-500" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">File Tri Thức ({filesQuery.data?.length || 0})</CardTitle>
+                      <CardDescription className="text-xs">Danh sách file đã tải lên</CardDescription>
+                    </div>
                   </div>
                 </div>
               </CardHeader>
@@ -276,20 +316,17 @@ export default function Settings() {
                     <p className="text-sm">Chưa có file tri thức nào</p>
                   </div>
                 ) : (
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     {filesQuery.data.map((file) => (
-                      <div key={file.id} className="flex items-center justify-between p-2.5 rounded-lg border border-border/50 hover:bg-muted/50 transition-colors group" data-testid={`row-knowledge-file-${file.id}`}>
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                          <FileText className="w-4 h-4 text-blue-500 shrink-0" />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-medium truncate">{file.originalName}</p>
-                            <p className="text-xs text-muted-foreground">{file.fileType.toUpperCase()} • {formatFileSize(file.fileSize)} • {new Date(file.createdAt).toLocaleDateString("vi-VN")}</p>
-                          </div>
-                        </div>
-                        <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(file.id)} disabled={deleteMutation.isPending} className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" data-testid={`button-delete-file-${file.id}`}>
-                          <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                        </Button>
-                      </div>
+                      <FileRowWithTags
+                        key={file.id}
+                        file={file}
+                        onDelete={() => deleteMutation.mutate(file.id)}
+                        onAutoTag={() => autoTagMutation.mutate(file.id)}
+                        onUpdateTags={(tags) => updateTagsMutation.mutate({ id: file.id, tags })}
+                        isDeleting={deleteMutation.isPending}
+                        isAutoTagging={autoTagMutation.isPending && autoTagMutation.variables === file.id}
+                      />
                     ))}
                   </div>
                 )}
@@ -335,6 +372,7 @@ export default function Settings() {
           </TabsContent>
 
           <TabsContent value="ai" className="space-y-5 mt-0">
+            {/* 1. AI Instructions */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-3">
@@ -343,7 +381,7 @@ export default function Settings() {
                   </div>
                   <div>
                     <CardTitle className="text-base">AI Instructions</CardTitle>
-                    <CardDescription className="text-xs">Hướng dẫn tùy chỉnh cho AI. Nội dung này sẽ được thêm vào mọi cuộc hội thoại AI.</CardDescription>
+                    <CardDescription className="text-xs">Hướng dẫn tùy chỉnh cho AI trong mọi cuộc hội thoại</CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -351,17 +389,178 @@ export default function Settings() {
                 <Textarea
                   value={instructions}
                   onChange={(e) => setInstructions(e.target.value)}
-                  placeholder="Ví dụ: Luôn trả lời bằng tiếng Việt. Ưu tiên phong cách hiện đại minimalist. Dự toán chi phí theo giá thị trường TP.HCM năm 2024-2025..."
-                  className="min-h-[250px] resize-y text-sm"
+                  placeholder="Ví dụ: Luôn trả lời bằng tiếng Việt. Ưu tiên phong cách hiện đại minimalist..."
+                  className="min-h-[200px] resize-y text-sm"
                   data-testid="input-instructions"
                 />
                 <div className="flex justify-between items-center">
                   <p className="text-xs text-muted-foreground">{instructions.length} ký tự</p>
                   <Button onClick={() => saveMutation.mutate(instructions)} disabled={saveMutation.isPending} data-testid="button-save-instructions">
                     {saveMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                    Lưu Instructions
+                    Lưu
                   </Button>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* 2. Nguồn Tri Thức AI */}
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
+                    <LinkIcon className="w-4 h-4 text-orange-500" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Nguồn Tri Thức AI</CardTitle>
+                    <CardDescription className="text-xs">Quản lý các nguồn dữ liệu AI sử dụng để xử lý</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  {[
+                    { label: "Files Upload", count: statsQuery.data?.bySource?.upload || 0, color: "text-blue-500", bg: "bg-blue-500/10" },
+                    { label: "Google Drive", count: statsQuery.data?.bySource?.drive || 0, color: "text-orange-500", bg: "bg-orange-500/10" },
+                    { label: "Tổng cộng", count: statsQuery.data?.total || 0, color: "text-primary", bg: "bg-primary/10" },
+                  ].map((item) => (
+                    <div key={item.label} className={`rounded-xl p-3 ${item.bg}`}>
+                      <p className={`text-2xl font-bold ${item.color}`}>{item.count}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{item.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 3. Trạng thái xử lý tri thức */}
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <Database className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Trạng thái xử lý tri thức</CardTitle>
+                    <CardDescription className="text-xs">OCR Drive PDF → lưu vào kho tri thức AI</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <DriveOcrProcessor />
+              </CardContent>
+            </Card>
+
+            {/* 4. Tag AI */}
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-purple-500/10 flex items-center justify-center shrink-0">
+                    <Tag className="w-4 h-4 text-purple-500" />
+                  </div>
+                  <div className="flex-1">
+                    <CardTitle className="text-base">Tag AI</CardTitle>
+                    <CardDescription className="text-xs">AI tự động phân loại tri thức theo tag giúp tìm kiếm nhanh hơn</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {!filesQuery.data || filesQuery.data.length === 0 ? (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <Tag className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm">Chưa có file nào để gắn tag</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {filesQuery.data.slice(0, 8).map((file) => (
+                      <div key={file.id} className="flex items-start gap-2 p-2.5 rounded-lg border border-border/50 hover:bg-muted/30 transition-colors">
+                        <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium truncate mb-1">{file.originalName}</p>
+                          <div className="flex flex-wrap gap-1">
+                            {(file.tags || []).map((tag, i) => (
+                              <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                                {tag}
+                                <button onClick={() => {
+                                  const newTags = (file.tags || []).filter((_, idx) => idx !== i);
+                                  updateTagsMutation.mutate({ id: file.id, tags: newTags });
+                                }} className="hover:text-destructive ml-0.5">
+                                  <X className="w-2.5 h-2.5" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost" size="sm"
+                          onClick={() => autoTagMutation.mutate(file.id)}
+                          disabled={autoTagMutation.isPending}
+                          className="h-6 px-2 text-xs shrink-0"
+                          data-testid={`button-autotag-${file.id}`}
+                        >
+                          {autoTagMutation.isPending && autoTagMutation.variables === file.id
+                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                            : <><Sparkles className="w-3 h-3 mr-1" />AI Tag</>
+                          }
+                        </Button>
+                      </div>
+                    ))}
+                    {filesQuery.data.length > 8 && (
+                      <p className="text-xs text-center text-muted-foreground pt-1">+{filesQuery.data.length - 8} file khác trong Kho Tri Thức</p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* 5. Thống kê Kho Tri Thức */}
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
+                    <BarChart2 className="w-4 h-4 text-green-500" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Thống kê Kho Tri Thức</CardTitle>
+                    <CardDescription className="text-xs">Phân tích tổng quan dữ liệu AI đang sử dụng</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {statsQuery.isLoading ? (
+                  <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40">
+                      <span className="text-sm font-medium">Tổng Files</span>
+                      <span className="text-2xl font-bold text-primary">{statsQuery.data?.total || 0}</span>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-2 font-medium">Theo loại file</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {Object.entries(statsQuery.data?.byType || {}).sort(([,a],[,b]) => b - a).map(([type, count]) => (
+                          <div key={type} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/30 border border-border/40">
+                            <div className="flex items-center gap-1.5">
+                              <div className={`w-2 h-2 rounded-full ${type === 'pdf' ? 'bg-red-500' : type === 'md' || type === 'markdown' ? 'bg-blue-500' : type === 'json' ? 'bg-yellow-500' : 'bg-gray-400'}`} />
+                              <span className="text-xs uppercase font-medium">{type}</span>
+                            </div>
+                            <span className="text-sm font-bold">{count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-2 font-medium">Theo nguồn</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {Object.entries(statsQuery.data?.bySource || {}).map(([source, count]) => (
+                          <div key={source} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/30 border border-border/40">
+                            <span className="text-xs capitalize font-medium">{source === 'drive' ? '📁 Drive' : '⬆️ Upload'}</span>
+                            <span className="text-sm font-bold">{count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -387,6 +586,81 @@ export default function Settings() {
         </Tabs>
       </div>
     </AppLayout>
+  );
+}
+
+function FileRowWithTags({
+  file, onDelete, onAutoTag, onUpdateTags, isDeleting, isAutoTagging
+}: {
+  file: KnowledgeFile;
+  onDelete: () => void;
+  onAutoTag: () => void;
+  onUpdateTags: (tags: string[]) => void;
+  isDeleting: boolean;
+  isAutoTagging: boolean;
+}) {
+  const [addingTag, setAddingTag] = useState(false);
+  const [newTag, setNewTag] = useState("");
+  const tags = file.tags || [];
+
+  const handleAddTag = () => {
+    const trimmed = newTag.trim();
+    if (trimmed && !tags.includes(trimmed)) {
+      onUpdateTags([...tags, trimmed]);
+    }
+    setNewTag("");
+    setAddingTag(false);
+  };
+
+  return (
+    <div className="p-2.5 rounded-lg border border-border/50 hover:bg-muted/30 transition-colors" data-testid={`row-knowledge-file-${file.id}`}>
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium truncate">{file.originalName}</p>
+            <p className="text-xs text-muted-foreground">{file.fileType.toUpperCase()} • {formatFileSize(file.fileSize)} • {new Date(file.createdAt).toLocaleDateString("vi-VN")} • {file.source === 'drive' ? '📁 Drive' : '⬆️ Upload'}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <Button variant="ghost" size="sm" onClick={onAutoTag} disabled={isAutoTagging} className="h-6 px-2 text-xs" data-testid={`button-autotag-${file.id}`}>
+            {isAutoTagging ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Sparkles className="w-3 h-3 mr-1 text-purple-500" />AI</>}
+          </Button>
+          <Button variant="ghost" size="icon" onClick={onDelete} disabled={isDeleting} className="h-6 w-6" data-testid={`button-delete-file-${file.id}`}>
+            <Trash2 className="w-3 h-3 text-destructive" />
+          </Button>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-1 pl-6">
+        {tags.map((tag, i) => (
+          <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs bg-purple-500/10 text-purple-600 dark:text-purple-400">
+            {tag}
+            <button onClick={() => onUpdateTags(tags.filter((_, idx) => idx !== i))} className="hover:text-destructive">
+              <X className="w-2.5 h-2.5" />
+            </button>
+          </span>
+        ))}
+        {addingTag ? (
+          <div className="flex items-center gap-1">
+            <input
+              autoFocus
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleAddTag(); if (e.key === "Escape") setAddingTag(false); }}
+              onBlur={() => { if (newTag.trim()) handleAddTag(); else setAddingTag(false); }}
+              className="w-20 text-xs border border-purple-300 rounded-full px-2 py-0.5 outline-none focus:ring-1 focus:ring-purple-400"
+              placeholder="Tag..."
+              data-testid={`input-new-tag-${file.id}`}
+            />
+          </div>
+        ) : (
+          <button onClick={() => setAddingTag(true)} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border border-dashed border-muted-foreground/40 text-muted-foreground hover:border-purple-400 hover:text-purple-500 transition-colors" data-testid={`button-add-tag-${file.id}`}>
+            <Plus className="w-2.5 h-2.5" />
+            Tag
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
