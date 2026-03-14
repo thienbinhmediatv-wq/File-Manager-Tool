@@ -7,8 +7,8 @@ import { tmpdir } from "os";
 import { join } from "path";
 
 export const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY_DIRECT || process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.OPENAI_API_KEY_DIRECT ? "https://api.openai.com/v1" : process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
 export type AudioFormat = "wav" | "mp3" | "webm" | "mp4" | "ogg" | "unknown";

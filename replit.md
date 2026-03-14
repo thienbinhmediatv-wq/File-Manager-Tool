@@ -177,16 +177,12 @@ Each step (3-7) has a corresponding Cẩm nang (handbook) stored in `knowledge_f
 - Available to all users (no unlock needed for chat)
 
 ## External APIs (Currently Used)
-- **OpenAI** (gpt-5.1, gpt-audio, DALL-E)
-  - Primary: Direct API key (`OPENAI_API_KEY_DIRECT`) — $0.0001-0.001/1K tokens
-  - Fallback: Replit AI Integrations (`AI_INTEGRATIONS_OPENAI_API_KEY`)
-  - Used in: server/routes.ts, server/telegramBot.ts, all integrations
-  - Cost: ~$2-10/tháng (light-medium usage)
+- **OpenAI** (gpt-5.1, gpt-audio, DALL-E) via Replit AI Integrations — ~$5-10/tháng
 - **SerpAPI** - Google search for design references — ~$5-20/tháng
 - **Artificial Studio** - Image-to-video generation — ~$10-30/tháng
 - **PDF Generator API** - Template-based PDF generation (fallback to PDFKit) — ~$5-20/tháng
 - **Google APIs** (Drive, Sheets, Vision) - Free tier (100K requests/ngày) — $0
-- **TOTAL API COST**: ~$22-80/tháng (primary OpenAI direct, Replit integration as backup)
+- **TOTAL API COST**: ~$25-80/tháng
 
 ## Email Integration
 - 2 Gmail senders with fallback: thienbinhmedia.tv@gmail.com → thuyndp.data2@gmail.com
