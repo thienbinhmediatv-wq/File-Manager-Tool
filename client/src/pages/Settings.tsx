@@ -93,6 +93,7 @@ export default function Settings() {
   const [newCatName, setNewCatName] = useState("");
   const [addingCat, setAddingCat] = useState(false);
   const [selectedFilesForCategory, setSelectedFilesForCategory] = useState<Set<number>>(new Set());
+  const [expandedFilesSection, setExpandedFilesSection] = useState(true);
 
   const handleVerifyPassword = async () => {
     setIsVerifying(true);
@@ -627,8 +628,13 @@ export default function Settings() {
               {/* Right: File Table */}
               <Card className="border-border/50">
                 <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
+                  <button
+                    onClick={() => setExpandedFilesSection(!expandedFilesSection)}
+                    className="w-full text-left flex items-center justify-between hover:opacity-70 transition-opacity"
+                    data-testid="button-toggle-files-section"
+                  >
                     <div className="flex items-center gap-2">
+                      {expandedFilesSection ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
                       <FileText className="w-4 h-4 text-blue-500" />
                       <CardTitle className="text-sm">
                         {selectedCategoryId === "all" ? "Tất cả Files" :
@@ -637,8 +643,9 @@ export default function Settings() {
                         <span className="ml-2 text-muted-foreground font-normal">({filteredFiles.length})</span>
                       </CardTitle>
                     </div>
-                  </div>
+                  </button>
                 </CardHeader>
+                {expandedFilesSection && (
                 <CardContent className="pt-0">
                   {filesQuery.isLoading ? (
                     <div className="flex items-center justify-center py-10">
@@ -671,6 +678,7 @@ export default function Settings() {
                     </div>
                   )}
                 </CardContent>
+                )}
               </Card>
             </div>
 
