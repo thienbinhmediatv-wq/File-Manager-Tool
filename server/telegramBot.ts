@@ -6,10 +6,11 @@ import { getDriveKnowledge } from "./driveKnowledge";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const ADMIN_PASSWORD = process.env.TELEGRAM_ADMIN_PASSWORD || "BMTDecor2025";
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 
 const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  apiKey: OPENROUTER_API_KEY,
+  baseURL: "https://openrouter.ai/api/v1",
 });
 
 const MAX_KNOWLEDGE_CHARS = 12000;
@@ -72,7 +73,7 @@ async function askAI(userId: number, userMessage: string): Promise<string> {
   try {
     const systemPrompt = await buildSystemPrompt();
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "zero-one-ai/zero-one-ai-yi-34b",
       messages: [
         { role: "system", content: systemPrompt },
         ...session.messages.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
