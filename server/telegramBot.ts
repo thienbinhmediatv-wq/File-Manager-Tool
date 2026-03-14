@@ -8,8 +8,8 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const ADMIN_PASSWORD = process.env.TELEGRAM_ADMIN_PASSWORD || "BMTDecor2025";
 
 const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  apiKey: process.env.OPENAI_API_KEY_DIRECT || process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  baseURL: process.env.OPENAI_API_KEY_DIRECT ? "https://api.openai.com/v1" : process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
 const MAX_KNOWLEDGE_CHARS = 12000;
