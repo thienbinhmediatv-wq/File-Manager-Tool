@@ -92,7 +92,7 @@ export default function Settings() {
   const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set());
   const [newCatName, setNewCatName] = useState("");
   const [addingCat, setAddingCat] = useState(false);
-  const [selectedFilesForCategory, setSelectedFilesForCategory] = useState<Set<number>>(new Set());
+  const [selectedFilesForCategory, setSelectedFilesForCategory] = useState<number[]>([]);
   const [expandedFilesSection, setExpandedFilesSection] = useState(true);
   const [selectedFileToView, setSelectedFileToView] = useState<KnowledgeFile | null>(null);
 
@@ -697,7 +697,7 @@ export default function Settings() {
                       <CardDescription className="text-xs">Chọn các file để thêm vào danh mục này</CardDescription>
                     </div>
                     <div className="text-xs text-muted-foreground font-medium">
-                      {selectedFilesForCategory.size} chọn
+                      {selectedFilesForCategory.length} chọn
                     </div>
                   </div>
                 </CardHeader>
@@ -717,12 +717,13 @@ export default function Settings() {
                             >
                               <input
                                 type="checkbox"
-                                checked={selectedFilesForCategory.has(file.id)}
+                                checked={selectedFilesForCategory.includes(file.id)}
                                 onChange={(e) => {
-                                  const newSet = new Set(selectedFilesForCategory);
-                                  if (e.target.checked) newSet.add(file.id);
-                                  else newSet.delete(file.id);
-                                  setSelectedFilesForCategory(newSet);
+                                  if (e.target.checked) {
+                                    setSelectedFilesForCategory([...selectedFilesForCategory, file.id]);
+                                  } else {
+                                    setSelectedFilesForCategory(selectedFilesForCategory.filter(id => id !== file.id));
+                                  }
                                 }}
                                 className="w-4 h-4 rounded cursor-pointer"
                               />
@@ -737,22 +738,24 @@ export default function Settings() {
                           <p className="text-center text-xs text-muted-foreground py-4">Tất cả files đều đã được gán hoặc không có files khác</p>
                         )}
                       </div>
-                      {selectedFilesForCategory.size > 0 && (
-                        <Button
-                          onClick={() => assignToCategoryMutation.mutate({
-                            categoryId: selectedCategoryId as number,
-                            fileIds: Array.from(selectedFilesForCategory)
-                          })}
-                          disabled={assignToCategoryMutation.isPending}
-                          className="w-full gap-2"
-                          data-testid="button-assign-files-to-category"
-                        >
-                          {assignToCategoryMutation.isPending ? (
-                            <><Loader2 className="w-4 h-4 animate-spin" />Đang thêm...</>
-                          ) : (
-                            <><Plus className="w-4 h-4" />Thêm {selectedFilesForCategory.size} file vào danh mục</>
-                          )}
-                        </Button>
+                      {selectedFilesForCategory.length > 0 && (
+                        <div className="space-y-2">
+                          <Button
+                            onClick={() => assignToCategoryMutation.mutate({
+                              categoryId: selectedCategoryId as number,
+                              fileIds: selectedFilesForCategory
+                            })}
+                            disabled={assignToCategoryMutation.isPending}
+                            className="w-full gap-2"
+                            data-testid="button-assign-files-to-category"
+                          >
+                            {assignToCategoryMutation.isPending ? (
+                              <><Loader2 className="w-4 h-4 animate-spin" />Đang thêm...</>
+                            ) : (
+                              <><Plus className="w-4 h-4" />Thêm {selectedFilesForCategory.length} file vào danh mục</>
+                            )}
+                          </Button>
+                        </div>
                       )}
                     </>
                   )}
