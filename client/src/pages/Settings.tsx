@@ -94,6 +94,7 @@ export default function Settings() {
   const [addingCat, setAddingCat] = useState(false);
   const [selectedFilesForCategory, setSelectedFilesForCategory] = useState<Set<number>>(new Set());
   const [expandedFilesSection, setExpandedFilesSection] = useState(true);
+  const [selectedFileToView, setSelectedFileToView] = useState<KnowledgeFile | null>(null);
 
   const handleVerifyPassword = async () => {
     setIsVerifying(true);
@@ -666,6 +667,7 @@ export default function Settings() {
                           key={file.id}
                           file={file}
                           categories={categories}
+                          onView={() => setSelectedFileToView(file)}
                           onDelete={() => deleteMutation.mutate(file.id)}
                           onAutoTag={() => autoTagMutation.mutate(file.id)}
                           onUpdateAiTags={(tags) => updateTagsMutation.mutate({ id: file.id, tags })}
@@ -954,16 +956,167 @@ export default function Settings() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* File Content Modal */}
+      {selectedFileToView && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={() => setSelectedFileToView(null)}>
+          <div
+            className="bg-white dark:bg-slate-900 w-full sm:w-[90%] lg:w-[70%] max-h-[90vh] rounded-t-3xl sm:rounded-2xl flex flex-col shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+            data-testid="modal-file-content"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border/50 shrink-0">
+              <div className="min-w-0 flex-1">
+                <h2 className="font-bold text-foreground truncate">{selectedFileToView.originalName}</h2>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {selectedFileToView.fileType.toUpperCase()} • {formatFileSize(selectedFileToView.fileSize)}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedFileToView(null)}
+                className="ml-4 p-2 hover:bg-muted rounded-lg transition-colors shrink-0"
+                data-testid="button-close-file-modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-4 sm:p-6">
+                <div className="bg-muted/40 rounded-lg p-4 font-mono text-xs whitespace-pre-wrap break-words max-h-96 overflow-y-auto leading-relaxed text-foreground/80 border border-border/50">
+                  {selectedFileToView.content.length > 5000
+                    ? selectedFileToView.content.slice(0, 5000) + `\n\n... (${selectedFileToView.content.length - 5000} ký tự tiếp theo được ẩn)`
+                    : selectedFileToView.content}
+                </div>
+
+                {/* Tags Section */}
+                <div className="mt-6 space-y-4">
+                  {/* AI Tags */}
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Sparkles className="w-4 h-4 text-purple-500" />
+                      <span className="text-xs font-medium text-foreground">AI Tags</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {(selectedFileToView.tags || []).length > 0 ? (
+                        (selectedFileToView.tags || []).map((tag, i) => (
+                          <span key={i} className="inline-flex items-center gap-0.5 px-2 py-1 rounded-full text-xs bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                            {tag}
+                            <button
+                              onClick={() => {
+                                const newTags = (selectedFileToView.tags || []).filter((_, idx) => idx !== i);
+                                updateTagsMutation.mutate({ id: selectedFileToView.id, tags: newTags });
+                                setSelectedFileToView({ ...selectedFileToView, tags: newTags });
+                              }}
+                              className="hover:text-destructive ml-0.5"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">Chưa có AI tag</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Manual Tags */}
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Tag className="w-4 h-4 text-blue-500" />
+                      <span className="text-xs font-medium text-foreground">Tags thủ công</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {(selectedFileToView.tagsManual || []).length > 0 ? (
+                        (selectedFileToView.tagsManual || []).map((tag, i) => (
+                          <span key={i} className="inline-flex items-center gap-0.5 px-2 py-1 rounded-full text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                            {tag}
+                            <button
+                              onClick={() => {
+                                const newTags = (selectedFileToView.tagsManual || []).filter((_, idx) => idx !== i);
+                                updateFileMutation.mutate({ id: selectedFileToView.id, updates: { tagsManual: newTags } as any });
+                                setSelectedFileToView({ ...selectedFileToView, tagsManual: newTags });
+                              }}
+                              className="hover:text-destructive ml-0.5"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">Chưa có tags thủ công</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Category */}
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Folder className="w-4 h-4 text-orange-500" />
+                      <span className="text-xs font-medium text-foreground">Danh mục</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        onClick={() => {
+                          updateFileMutation.mutate({ id: selectedFileToView.id, updates: { categoryId: null } as any });
+                          setSelectedFileToView({ ...selectedFileToView, categoryId: null });
+                        }}
+                        className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                          selectedFileToView.categoryId === null
+                            ? "border-muted-foreground bg-muted text-foreground font-medium"
+                            : "border-border hover:bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        Không phân loại
+                      </button>
+                      {categories.map(cat => (
+                        <button
+                          key={cat.id}
+                          onClick={() => {
+                            updateFileMutation.mutate({ id: selectedFileToView.id, updates: { categoryId: cat.id } as any });
+                            setSelectedFileToView({ ...selectedFileToView, categoryId: cat.id });
+                          }}
+                          className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                            selectedFileToView.categoryId === cat.id
+                              ? "border-orange-400 bg-orange-500/10 text-orange-600 dark:text-orange-400 font-medium"
+                              : "border-border hover:bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {cat.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-border/50 p-4 sm:p-6 flex gap-2 shrink-0 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => setSelectedFileToView(null)}
+                data-testid="button-close-modal"
+              >
+                Đóng
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }
 
 // ===== KNOWLEDGE FILE ROW =====
 function KnowledgeFileRow({
-  file, categories, onDelete, onAutoTag, onUpdateAiTags, onUpdateManualTags, onSetCategory, isDeleting, isAutoTagging
+  file, categories, onView, onDelete, onAutoTag, onUpdateAiTags, onUpdateManualTags, onSetCategory, isDeleting, isAutoTagging
 }: {
   file: KnowledgeFile;
   categories: KnowledgeCategory[];
+  onView: () => void;
   onDelete: () => void;
   onAutoTag: () => void;
   onUpdateAiTags: (tags: string[]) => void;
@@ -994,8 +1147,11 @@ function KnowledgeFileRow({
   return (
     <div className={`rounded-lg border ${file.pendingUpdate ? "border-amber-300/60 bg-amber-500/5" : "border-border/50"} transition-colors`} data-testid={`row-knowledge-file-${file.id}`}>
       {/* Main row */}
-      <div className="flex items-center gap-2 p-2.5">
-        <button onClick={() => setExpanded(!expanded)} className="shrink-0 text-muted-foreground hover:text-foreground transition-colors">
+      <div className="flex items-center gap-2 p-2.5 cursor-pointer hover:bg-muted/30 transition-colors" onClick={onView}>
+        <button
+          onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+        >
           {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
         </button>
 
@@ -1071,7 +1227,7 @@ function KnowledgeFileRow({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-0.5 shrink-0">
+        <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
           <Button
             variant="ghost" size="sm"
             onClick={onAutoTag}
