@@ -73,7 +73,7 @@ async function askAI(userId: number, userMessage: string): Promise<string> {
   try {
     const systemPrompt = await buildSystemPrompt();
     const response = await openai.chat.completions.create({
-      model: "zero-one-ai/zero-one-ai-yi-34b",
+      model: "openai/gpt-5.4",
       messages: [
         { role: "system", content: systemPrompt },
         ...session.messages.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
@@ -86,7 +86,8 @@ async function askAI(userId: number, userMessage: string): Promise<string> {
     session.messages.push({ role: "assistant", content: reply });
     return reply;
   } catch (error: any) {
-    console.error("[TelegramBot] AI error:", error.message);
+    console.error("[TelegramBot] AI error:", error.status || error.code, "-", error.message);
+    if (error.response?.data) console.error("[TelegramBot] API response:", error.response.data);
     return "⚠️ Có lỗi kết nối AI. Vui lòng thử lại sau.";
   }
 }
