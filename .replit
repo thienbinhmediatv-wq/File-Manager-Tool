@@ -51,3 +51,7 @@ PDF_GENERATOR_WORKSPACE = "tcmedia.copyright@gmail.com"
 GMAIL_SENDER = "thienbinhmedia.tv@gmail.com"
 GMAIL_SENDER_2 = "thuyndp.data2@gmail.com"
 SETTINGS_PASSWORD = "Bao@0206"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000
