@@ -47,23 +47,35 @@ Each step (3-7) has a corresponding Cẩm nang (handbook) stored in `knowledge_f
 - `server/stripeClient.ts` - Stripe client via Replit Connectors (getUncachableStripeClient, getStripeSync)
 - `server/driveKnowledge.ts` - Google Drive knowledge integration (BMT Decor folder)
 - `server/index.ts` - Express setup with Stripe webhook (BEFORE express.json), Stripe init
-- `client/src/pages/Dashboard.tsx` - Project list dashboard
+- `client/src/pages/Dashboard.tsx` - Project list dashboard (navigates to /projects/new)
+- `client/src/pages/NewProjectWizard.tsx` - New project creation wizard (/projects/new)
 - `client/src/pages/ProjectWizard.tsx` - 7-step wizard with split-screen layout
 - `client/src/pages/Settings.tsx` - AI Instructions, Knowledge Files upload, Stripe products
 - `client/src/pages/Guide.tsx` - Usage guide page (7-step process documentation)
-- `client/src/components/steps/Step*.tsx` - Individual step components (1-7)
+- `client/src/components/steps/Step1DataCollection.tsx` - Step 1 wrapper with 4 sub-steps navigation
+- `client/src/components/steps/Step1Sub1BasicInfo.tsx` - Sub-step 1.1: Basic project info form
+- `client/src/components/steps/Step1Sub2Architecture.tsx` - Sub-step 1.2: Architecture & interior style selection
+- `client/src/components/steps/Step1Sub3Requirements.tsx` - Sub-step 1.3: Special requirements + file upload
+- `client/src/components/steps/Step1Sub4Confirmation.tsx` - Sub-step 1.4: Summary + AI process trigger
+- `client/src/components/steps/Step*.tsx` - Individual step components (2-7)
 - `client/src/components/chat/AIChatPanel.tsx` - AI chat panel
 - `client/src/components/layout/AppLayout.tsx` - Sidebar with logo, nav (Dashboard, Dự án, Hướng dẫn, Cài đặt)
 
 ## Database Tables
-- **projects** - Project data with 7-step workflow fields, JSON result columns
+- **projects** - Project data with 7-step workflow fields, JSON result columns. Includes: projectType, bathrooms, selectedArchitecture (json), selectedInteriorStyle
 - **ai_settings** - Custom AI instructions (single row, upsert pattern)
 - **knowledge_files** - Uploaded knowledge files (content stored as text in DB)
 - **drive_folders** - Google Drive folder IDs for multi-source knowledge (name, folderId, createdAt)
 - **conversations + messages** - AI chat history
 
 ## 7-Step Workflow
-1. Thu thập dữ liệu (Data Collection)
+1. Thu thập dữ liệu (Data Collection) — 4 sub-steps:
+   - 1.1 Thông tin cơ bản (Basic Info: project type, title, dimensions, floors, bedrooms, bathrooms, budget)
+   - 1.2 Kiến trúc & Nội thất (Architecture & Interior: dynamic cards by floor count, interior style)
+   - 1.3 Yêu cầu đặc biệt (Special Requirements: 8 checkboxes, file upload, Google Sheet link)
+   - 1.4 Xác nhận (Confirmation: summary + "Xử lý AI" button)
+   - New projects: all 4 sub-steps; Existing projects: skip to 1.3
+   - Architecture images: `/public/images/architecture/{1tang,2tang,3tang,4-5tang}/` (placeholder SVGs, to be replaced)
 2. Phân tích hiện trạng & Tạo Layout (Analysis & Layout)
 3. Xuất bản vẽ CAD/BIM (CAD Export)
 4. Tạo mô hình 3D + Mặt tiền (3D Model & Facade)

@@ -20,8 +20,12 @@ export const projects = pgTable("projects", {
   landLength: real("land_length").notNull(),
   floors: integer("floors").notNull().default(1),
   bedrooms: integer("bedrooms").notNull().default(1),
+  bathrooms: integer("bathrooms").notNull().default(1),
   style: text("style").notNull(),
   budget: integer("budget").notNull(),
+  projectType: text("project_type").notNull().default("Xây mới"),
+  selectedArchitecture: json("selected_architecture").$type<{ name: string; image: string }>(),
+  selectedInteriorStyle: text("selected_interior_style"),
   currentStep: integer("current_step").notNull().default(1),
   stepStatuses: json("step_statuses").$type<Record<string, string>>().default({
     "1": "approved", "2": "pending", "3": "pending",
@@ -110,6 +114,8 @@ export const insertProjectSchema = createInsertSchema(projects).omit({
   pdfEstimate: true,
   chatHistory: true,
   status: true,
+  selectedArchitecture: true,
+  selectedInteriorStyle: true,
 });
 
 export type Project = typeof projects.$inferSelect;

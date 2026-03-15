@@ -174,7 +174,7 @@ export default function ProjectWizard() {
 
       <div className="flex-1 flex min-h-0">
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:flex-none md:w-[60%]">
-          {currentStep === 1 && <Step1DataCollection {...stepProps(1)} onSubmit={(data) => handleSubmit(1, data)} />}
+          {currentStep === 1 && <Step1DataCollection {...stepProps(1)} onSubmit={(data) => handleSubmit(1, data)} isNewProject={false} />}
           {currentStep === 2 && <Step2Analysis {...stepProps(2)} />}
           {currentStep === 3 && <Step3CAD {...stepProps(3)} />}
           {currentStep === 4 && <Step4Model3D {...stepProps(4)} onSubmit={(data) => handleSubmit(4, data)} />}

@@ -297,11 +297,16 @@ function buildSearchQuery(message: string, project: any): string {
 }
 
 function buildProjectContext(project: Record<string, unknown>): string {
+  const arch = project.selectedArchitecture as { name: string } | null;
   return `Thông tin dự án:
+- Loại dự án: ${project.projectType || "Xây mới"}
 - Kích thước đất: ${project.landWidth}m x ${project.landLength}m (${(project.landWidth as number) * (project.landLength as number)} m²)
 - Số tầng: ${project.floors}
 - Số phòng ngủ: ${project.bedrooms}
+- Số phòng WC: ${project.bathrooms || 1}
 - Phong cách: ${project.style}
+- Kiến trúc: ${arch?.name || "Chưa chọn"}
+- Nội thất: ${project.selectedInteriorStyle || project.style}
 - Ngân sách: ${project.budget} triệu VND
 - Yêu cầu đặc biệt: ${JSON.stringify(project.siteRequirements || {})}`;
 }
@@ -337,8 +342,10 @@ export async function registerRoutes(
         landLength: z.coerce.number().min(1),
         floors: z.coerce.number().min(1).max(10),
         bedrooms: z.coerce.number().min(1).max(20),
+        bathrooms: z.coerce.number().min(1).max(20).default(1),
         style: z.string().min(1),
         budget: z.coerce.number().min(0),
+        projectType: z.string().default("Xây mới"),
       });
       const input = schema.parse(req.body);
       const project = await storage.createProject(input);
@@ -403,6 +410,9 @@ export async function registerRoutes(
       if (req.body.siteRequirements) updates.siteRequirements = req.body.siteRequirements;
       if (req.body.budgetSheetUrl) updates.budgetSheetUrl = req.body.budgetSheetUrl;
       if (req.body.uploadedFiles) updates.uploadedFiles = req.body.uploadedFiles;
+      if (req.body.selectedArchitecture) updates.selectedArchitecture = req.body.selectedArchitecture;
+      if (req.body.selectedInteriorStyle) updates.selectedInteriorStyle = req.body.selectedInteriorStyle;
+      if (req.body.style) updates.style = req.body.style;
     } else if (step === 4) {
       if (req.body.facadeStyle) updates.facadeStyle = req.body.facadeStyle;
     }

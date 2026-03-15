@@ -1,10 +1,8 @@
-import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Plus, Building2, Ruler, Calendar, ArrowRight, Trash2, Camera, DollarSign } from "lucide-react";
 import { format } from "date-fns";
 import { useProjects, useDeleteProject } from "@/hooks/use-projects";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { CreateProjectDialog } from "@/components/projects/CreateProjectDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -42,7 +40,7 @@ const statusConfig = {
 export default function Dashboard() {
   const { data: projects, isLoading } = useProjects();
   const deleteMutation = useDeleteProject();
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [, navigate] = useLocation();
 
   const handleDelete = (e: React.MouseEvent, id: number) => {
     e.preventDefault();
@@ -59,7 +57,7 @@ export default function Dashboard() {
           <p className="text-muted-foreground mt-1">Quản lý các dự án thiết kế kiến trúc AI.</p>
         </div>
         <Button
-          onClick={() => setIsCreateOpen(true)}
+          onClick={() => navigate("/projects/new")}
           className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/25 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 rounded-xl px-6 h-11 font-semibold"
           data-testid="button-create-project"
         >
@@ -83,7 +81,7 @@ export default function Dashboard() {
           <p className="text-muted-foreground mb-8 max-w-md">
             Tạo dự án thiết kế kiến trúc đầu tiên để AI tự động tạo layout, 3D, render và hồ sơ PDF.
           </p>
-          <Button onClick={() => setIsCreateOpen(true)} size="lg" className="rounded-xl bg-primary" data-testid="button-create-first">
+          <Button onClick={() => navigate("/projects/new")} size="lg" className="rounded-xl bg-primary" data-testid="button-create-first">
             Tạo dự án đầu tiên
           </Button>
         </div>
@@ -190,7 +188,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      <CreateProjectDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />
     </AppLayout>
   );
 }
