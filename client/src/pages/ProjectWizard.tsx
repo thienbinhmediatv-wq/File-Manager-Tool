@@ -188,7 +188,7 @@ export default function ProjectWizard() {
           )}
         </div>
 
-        <div className="border-l border-border/50 flex-col hidden md:flex" style={{ flex: "0 0 40%" }}>
+        <div className="border-l border-border/50 flex flex-col hidden md:flex h-full" style={{ flex: "0 0 40%" }}>
           <AIChatPanel
             messages={messages}
             isLoading={chatLoading}
