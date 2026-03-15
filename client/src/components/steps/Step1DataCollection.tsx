@@ -117,8 +117,7 @@ export function Step1DataCollection({ project, stepStatus, onProcess, onApprove,
       onGoBack={onGoBack}
       isProcessing={isProcessing}
       isApproving={isApproving}
-      resultContent={
-        stepStatus !== "pending" ? (
+      resultContent={stepStatus === "pending" ? null : (
         <div className="space-y-3">
           <h3 className="font-semibold text-green-700">Dữ liệu đã thu thập</h3>
           <div className="grid grid-cols-2 gap-3 text-sm">
@@ -171,8 +170,7 @@ export function Step1DataCollection({ project, stepStatus, onProcess, onApprove,
             </div>
           )}
         </div>
-        ) : null
-      }
+      )}
     >
       <div className="space-y-5">
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
