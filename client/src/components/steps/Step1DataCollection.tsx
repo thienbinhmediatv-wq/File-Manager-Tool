@@ -34,12 +34,13 @@ interface Props {
   onApprove: () => void;
   onRedo: () => void;
   onGoBack?: () => void;
+  backLabel?: string;
   onSubmit: (data: Record<string, unknown>) => void;
   isProcessing: boolean;
   isApproving: boolean;
 }
 
-export function Step1DataCollection({ project, stepStatus, onProcess, onApprove, onRedo, onGoBack, onSubmit, isProcessing, isApproving }: Props) {
+export function Step1DataCollection({ project, stepStatus, onProcess, onApprove, onRedo, onGoBack, backLabel, onSubmit, isProcessing, isApproving }: Props) {
   const [requirements, setRequirements] = useState<Record<string, boolean>>(
     (project.siteRequirements as Record<string, boolean>) || {}
   );
@@ -115,6 +116,7 @@ export function Step1DataCollection({ project, stepStatus, onProcess, onApprove,
       onApprove={onApprove}
       onRedo={onRedo}
       onGoBack={onGoBack}
+      backLabel={backLabel}
       isProcessing={isProcessing}
       isApproving={isApproving}
       resultContent={stepStatus === "pending" ? null : (

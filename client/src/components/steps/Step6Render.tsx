@@ -31,11 +31,12 @@ interface Props {
   onApprove: () => void;
   onRedo: () => void;
   onGoBack?: () => void;
+  backLabel?: string;
   isProcessing: boolean;
   isApproving: boolean;
 }
 
-export function Step6Render({ project, stepStatus, onProcess, onApprove, onRedo, onGoBack, isProcessing, isApproving }: Props) {
+export function Step6Render({ project, stepStatus, onProcess, onApprove, onRedo, onGoBack, backLabel, isProcessing, isApproving }: Props) {
   const [selectedAngles, setSelectedAngles] = useState<Record<string, boolean>>({ facade: true, living: true, bedroom: true });
   const [videoJobs, setVideoJobs] = useState<Record<string, { jobId: string; status: string; output?: string }>>({});
   const [generatingVideo, setGeneratingVideo] = useState<string | null>(null);
@@ -99,6 +100,7 @@ export function Step6Render({ project, stepStatus, onProcess, onApprove, onRedo,
       onApprove={onApprove}
       onRedo={onRedo}
       onGoBack={onGoBack}
+      backLabel={backLabel}
       isProcessing={isProcessing}
       isApproving={isApproving}
       resultContent={

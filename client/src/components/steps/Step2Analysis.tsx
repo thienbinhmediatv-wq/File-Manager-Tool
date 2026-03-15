@@ -10,11 +10,12 @@ interface Props {
   onApprove: () => void;
   onRedo: () => void;
   onGoBack?: () => void;
+  backLabel?: string;
   isProcessing: boolean;
   isApproving: boolean;
 }
 
-export function Step2Analysis({ project, stepStatus, onProcess, onApprove, onRedo, onGoBack, isProcessing, isApproving }: Props) {
+export function Step2Analysis({ project, stepStatus, onProcess, onApprove, onRedo, onGoBack, backLabel, isProcessing, isApproving }: Props) {
   const analysis = project.analysisResult as Record<string, string> | null;
   const layout = project.layoutResult as { floors?: Array<{ floor: number; rooms: Array<{ name: string; w: number; h: number }> }> } | null;
   
@@ -32,6 +33,7 @@ export function Step2Analysis({ project, stepStatus, onProcess, onApprove, onRed
       onApprove={onApprove}
       onRedo={onRedo}
       onGoBack={onGoBack}
+      backLabel={backLabel}
       isProcessing={isProcessing}
       isApproving={isApproving}
       resultContent={

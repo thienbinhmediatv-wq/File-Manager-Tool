@@ -21,12 +21,13 @@ interface Props {
   onApprove: () => void;
   onRedo: () => void;
   onGoBack?: () => void;
+  backLabel?: string;
   onSubmit: (data: Record<string, unknown>) => void;
   isProcessing: boolean;
   isApproving: boolean;
 }
 
-export function Step4Model3D({ project, stepStatus, onProcess, onApprove, onRedo, onGoBack, onSubmit, isProcessing, isApproving }: Props) {
+export function Step4Model3D({ project, stepStatus, onProcess, onApprove, onRedo, onGoBack, backLabel, onSubmit, isProcessing, isApproving }: Props) {
   const [facadeStyle, setFacadeStyle] = useState(project.facadeStyle || project.style);
   const [colorScheme, setColorScheme] = useState("white-gray");
   const result = project.model3dResult as { facadeImages?: string[]; designDescription?: string; facadeStyle?: string } | null;
@@ -45,6 +46,7 @@ export function Step4Model3D({ project, stepStatus, onProcess, onApprove, onRedo
       onApprove={onApprove}
       onRedo={onRedo}
       onGoBack={onGoBack}
+      backLabel={backLabel}
       isProcessing={isProcessing}
       isApproving={isApproving}
       resultContent={

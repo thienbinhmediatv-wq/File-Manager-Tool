@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { ChevronLeft, Check, Camera, Ruler, Layout, Box, Sofa, Image, FileText, MessageCircle, X } from "lucide-react";
 import { useProject, useProcessStep, useApproveStep, useRedoStep, useSubmitStep } from "@/hooks/use-projects";
 import { useChat } from "@/hooks/use-chat";
@@ -46,6 +46,7 @@ export default function ProjectWizard() {
   const redoStep = useRedoStep();
   const submitStep = useSubmitStep();
   const { messages, isLoading: chatLoading, sendMessage, addSystemMessage, loadHistory } = useChat(projectId);
+  const [, navigate] = useLocation();
   const [showMobileChat, setShowMobileChat] = useState(false);
 
   useEffect(() => {
@@ -90,7 +91,8 @@ export default function ProjectWizard() {
     onProcess: () => handleProcess(step),
     onApprove: () => handleApprove(step),
     onRedo: () => handleRedo(step),
-    onGoBack: step > 1 ? () => handleRedo(step - 1) : undefined,
+    onGoBack: step > 1 ? () => handleRedo(step - 1) : () => navigate("/"),
+    backLabel: step === 1 ? "Dashboard" : "Quay lại",
     isProcessing: processStep.isPending,
     isApproving: approveStep.isPending,
   });
@@ -171,7 +173,7 @@ export default function ProjectWizard() {
       </div>
 
       <div className="flex-1 flex min-h-0">
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6" style={{ flex: "0 0 60%" }}>
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:flex-none md:w-[60%]">
           {currentStep === 1 && <Step1DataCollection {...stepProps(1)} onSubmit={(data) => handleSubmit(1, data)} />}
           {currentStep === 2 && <Step2Analysis {...stepProps(2)} />}
           {currentStep === 3 && <Step3CAD {...stepProps(3)} />}
@@ -189,7 +191,7 @@ export default function ProjectWizard() {
           )}
         </div>
 
-        <div className="border-l border-border/50 flex flex-col hidden md:flex h-full" style={{ flex: "0 0 40%" }}>
+        <div className="border-l border-border/50 hidden md:flex md:flex-col md:w-[40%] md:flex-none h-full">
           <AIChatPanel
             messages={messages}
             isLoading={chatLoading}
