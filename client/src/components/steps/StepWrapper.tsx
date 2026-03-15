@@ -15,6 +15,7 @@ interface StepWrapperProps {
   isApproving: boolean;
   children: ReactNode;
   resultContent?: ReactNode;
+  forceShowForm?: boolean;
 }
 
 interface ImageGalleryImage {
@@ -142,10 +143,10 @@ export function ImageGallery({ images }: ImageGalleryProps) {
 
 export function StepWrapper({
   title, description, stepStatus, onProcess, onApprove, onRedo, onGoBack, backLabel,
-  isProcessing, isApproving, children, resultContent,
+  isProcessing, isApproving, children, resultContent, forceShowForm,
 }: StepWrapperProps) {
   const showResult = stepStatus === "completed" || stepStatus === "approved" || (stepStatus === "processing" && !!resultContent);
-  const showForm = stepStatus === "pending" || stepStatus === "submitted" || stepStatus === "error";
+  const showForm = forceShowForm || stepStatus === "pending" || stepStatus === "submitted" || stepStatus === "error";
   const isCompleted = stepStatus === "completed";
   const isApproved = stepStatus === "approved";
   const isProcessingState = stepStatus === "processing";
@@ -193,7 +194,7 @@ export function StepWrapper({
           className="sticky bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-t border-border/50 px-4 py-3 -mx-4 sm:-mx-6 sm:px-6 flex items-center justify-between gap-3"
           data-testid="step-bottom-bar"
         >
-          {showForm && (
+          {showForm && !isCompleted && !isApproved && (
             <>
               {onGoBack ? (
                 <Button

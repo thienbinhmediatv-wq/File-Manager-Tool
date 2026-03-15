@@ -90,8 +90,11 @@ export function Step1DataCollection({ project, stepStatus, onProcess, onApprove,
     onSubmit({ uploadedFiles: newFiles });
   };
 
+  const [showSummary, setShowSummary] = useState(false);
+
   const handleProcess = () => {
     onSubmit({ siteRequirements: requirements, budgetSheetUrl: budgetUrl, uploadedFiles });
+    setShowSummary(true);
     onProcess();
   };
 
@@ -119,7 +122,8 @@ export function Step1DataCollection({ project, stepStatus, onProcess, onApprove,
       backLabel={backLabel}
       isProcessing={isProcessing}
       isApproving={isApproving}
-      resultContent={stepStatus === "pending" ? null : (
+      forceShowForm={true}
+      resultContent={!showSummary ? null : (
         <div className="space-y-3">
           <h3 className="font-semibold text-green-700">Dữ liệu đã thu thập</h3>
           <div className="grid grid-cols-2 gap-3 text-sm">
