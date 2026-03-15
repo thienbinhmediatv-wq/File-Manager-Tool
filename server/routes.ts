@@ -1342,7 +1342,7 @@ Trả lời chi tiết, có con số thực tế.` }
     if (!project) return res.status(404).json({ message: "Project not found" });
 
     const statuses = { ...(project.stepStatuses as Record<string, string> || {}), [step]: "pending" };
-    const updated = await storage.updateProject(id, { stepStatuses: statuses });
+    const updated = await storage.updateProject(id, { stepStatuses: statuses, currentStep: step });
     res.json(updated);
   });
 
