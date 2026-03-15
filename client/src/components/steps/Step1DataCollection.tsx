@@ -118,6 +118,7 @@ export function Step1DataCollection({ project, stepStatus, onProcess, onApprove,
       isProcessing={isProcessing}
       isApproving={isApproving}
       resultContent={
+        stepStatus !== "pending" ? (
         <div className="space-y-3">
           <h3 className="font-semibold text-green-700">Dữ liệu đã thu thập</h3>
           <div className="grid grid-cols-2 gap-3 text-sm">
@@ -170,6 +171,7 @@ export function Step1DataCollection({ project, stepStatus, onProcess, onApprove,
             </div>
           )}
         </div>
+        ) : null
       }
     >
       <div className="space-y-5">
