@@ -370,11 +370,31 @@ export function startTelegramBot() {
   process.once("SIGINT", () => bot.stop("SIGINT"));
   process.once("SIGTERM", () => bot.stop("SIGTERM"));
 
-  bot.launch({
-    allowedUpdates: ["message", "callback_query"],
-  }).catch((err: any) => {
-    console.error("[TelegramBot] ❌ Launch failed:", err.message);
-  });
+  const MAX_LAUNCH_ATTEMPTS = 3;
+  const RETRY_DELAY_MS = 3000;
 
-  console.log("[TelegramBot] ✅ BMT Decor Telegram Bot is LIVE!");
+  (async () => {
+    for (let attempt = 1; attempt <= MAX_LAUNCH_ATTEMPTS; attempt++) {
+      try {
+        await bot.telegram.deleteWebhook({ drop_pending_updates: false });
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+
+        await bot.launch(
+          { allowedUpdates: ["message", "callback_query"] },
+          () => {
+            console.log("[TelegramBot] ✅ BMT Decor Telegram Bot is LIVE!");
+          }
+        );
+        return;
+      } catch (err: any) {
+        console.error(`[TelegramBot] ❌ Launch attempt ${attempt}/${MAX_LAUNCH_ATTEMPTS} failed:`, err.message);
+        if (attempt < MAX_LAUNCH_ATTEMPTS) {
+          console.log(`[TelegramBot] Retrying in ${RETRY_DELAY_MS / 1000}s...`);
+          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+        } else {
+          console.error("[TelegramBot] ❌ All launch attempts failed. Bot is NOT running.");
+        }
+      }
+    }
+  })();
 }
