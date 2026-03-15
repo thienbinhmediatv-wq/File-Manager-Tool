@@ -156,7 +156,7 @@ export function StepWrapper({
       {showForm && (
         <div className="space-y-4">
           {children}
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-3 pt-2 flex-wrap">
             {onGoBack && (
               <Button
                 onClick={onGoBack}
@@ -176,7 +176,7 @@ export function StepWrapper({
               {isProcessing ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> AI đang xử lý...</>
               ) : (
-                <><Sparkles className="w-4 h-4 mr-2" /> AI Xử lý</>
+                <><Sparkles className="w-4 h-4 mr-2" /> Tiếp tục</>
               )}
             </Button>
           </div>
