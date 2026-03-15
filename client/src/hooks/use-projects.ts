@@ -113,7 +113,7 @@ export function useRedoStep() {
       return res.json();
     },
     onSuccess: (_d, vars) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", vars.projectId] });
+      queryClient.refetchQueries({ queryKey: ["/api/projects", vars.projectId] });
     },
   });
 }

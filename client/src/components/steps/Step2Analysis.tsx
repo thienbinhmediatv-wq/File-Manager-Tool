@@ -1,6 +1,7 @@
 import { StepWrapper } from "./StepWrapper";
 import type { Project } from "@shared/schema";
-import { Sparkles } from "lucide-react";
+import { Sparkles, ChevronLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface Props {
   project: Project;
@@ -15,6 +16,11 @@ interface Props {
 export function Step2Analysis({ project, stepStatus, onProcess, onApprove, onRedo, isProcessing, isApproving }: Props) {
   const analysis = project.analysisResult as Record<string, string> | null;
   const layout = project.layoutResult as { floors?: Array<{ floor: number; rooms: Array<{ name: string; w: number; h: number }> }> } | null;
+  
+  const handleBackToStep1 = async () => {
+    const res = await fetch(`/api/projects/${project.id}/step/1/redo`, { method: "POST" });
+    if (res.ok) window.location.reload();
+  };
 
   return (
     <StepWrapper
@@ -73,6 +79,20 @@ export function Step2Analysis({ project, stepStatus, onProcess, onApprove, onRed
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {!analysis && !layout && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-4 space-y-3">
+              <p className="text-sm text-amber-700 dark:text-amber-300 text-center">Chưa có dữ liệu từ Bước 1. Hãy quay lại Bước 1 để hoàn thành.</p>
+              <div className="text-center">
+                <Button 
+                  onClick={handleBackToStep1}
+                  variant="outline"
+                  className="border-amber-300 dark:border-amber-600 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 rounded-xl"
+                >
+                  <ChevronLeft className="w-4 h-4 mr-2" /> Quay lại Bước 1
+                </Button>
+              </div>
             </div>
           )}
         </div>
