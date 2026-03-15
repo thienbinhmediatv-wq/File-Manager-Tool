@@ -24,11 +24,12 @@ interface Props {
   onProcess: () => void;
   onApprove: () => void;
   onRedo: () => void;
+  onGoBack?: () => void;
   isProcessing: boolean;
   isApproving: boolean;
 }
 
-export function Step5Interior({ project, stepStatus, onProcess, onApprove, onRedo, isProcessing, isApproving }: Props) {
+export function Step5Interior({ project, stepStatus, onProcess, onApprove, onRedo, onGoBack, isProcessing, isApproving }: Props) {
   const [selectedMaterials, setSelectedMaterials] = useState<Record<string, boolean>>({});
   const [interiorStyle, setInteriorStyle] = useState(project.style);
   const [lighting, setLighting] = useState("Ấm áp (Warm)");
@@ -46,6 +47,7 @@ export function Step5Interior({ project, stepStatus, onProcess, onApprove, onRed
       onProcess={onProcess}
       onApprove={onApprove}
       onRedo={onRedo}
+      onGoBack={onGoBack}
       isProcessing={isProcessing}
       isApproving={isApproving}
       resultContent={

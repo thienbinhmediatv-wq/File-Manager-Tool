@@ -9,11 +9,12 @@ interface Props {
   onProcess: () => void;
   onApprove: () => void;
   onRedo: () => void;
+  onGoBack?: () => void;
   isProcessing: boolean;
   isApproving: boolean;
 }
 
-export function Step3CAD({ project, stepStatus, onProcess, onApprove, onRedo, isProcessing, isApproving }: Props) {
+export function Step3CAD({ project, stepStatus, onProcess, onApprove, onRedo, onGoBack, isProcessing, isApproving }: Props) {
   const cadResult = project.cadResult as {
     cadDrawings?: Array<{ name: string; type: string; imageUrl?: string; floor?: number }>;
     cadDescription?: string;
@@ -37,6 +38,7 @@ export function Step3CAD({ project, stepStatus, onProcess, onApprove, onRedo, is
       onProcess={onProcess}
       onApprove={onApprove}
       onRedo={onRedo}
+      onGoBack={onGoBack}
       isProcessing={isProcessing}
       isApproving={isApproving}
       resultContent={

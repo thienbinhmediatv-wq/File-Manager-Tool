@@ -9,6 +9,7 @@ interface StepWrapperProps {
   onProcess: () => void;
   onApprove: () => void;
   onRedo: () => void;
+  onGoBack?: () => void;
   isProcessing: boolean;
   isApproving: boolean;
   children: ReactNode;
@@ -139,7 +140,7 @@ export function ImageGallery({ images }: ImageGalleryProps) {
 }
 
 export function StepWrapper({
-  title, description, stepStatus, onProcess, onApprove, onRedo,
+  title, description, stepStatus, onProcess, onApprove, onRedo, onGoBack,
   isProcessing, isApproving, children, resultContent,
 }: StepWrapperProps) {
   const showResult = stepStatus === "completed" || stepStatus === "approved" || (stepStatus === "processing" && !!resultContent);
@@ -156,6 +157,16 @@ export function StepWrapper({
         <div className="space-y-4">
           {children}
           <div className="flex gap-3 pt-2">
+            {onGoBack && (
+              <Button
+                onClick={onGoBack}
+                variant="outline"
+                className="rounded-xl px-6"
+                data-testid="button-go-back"
+              >
+                <ChevronLeft className="w-4 h-4 mr-2" /> Quay lại
+              </Button>
+            )}
             <Button
               onClick={onProcess}
               disabled={isProcessing}

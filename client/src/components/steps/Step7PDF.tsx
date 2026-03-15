@@ -12,6 +12,7 @@ interface Props {
   onProcess: () => void;
   onApprove: () => void;
   onRedo: () => void;
+  onGoBack?: () => void;
   isProcessing: boolean;
   isApproving: boolean;
 }
@@ -28,7 +29,7 @@ const sectionDetails = [
   "Bảng dự toán chi phí chi tiết",
 ];
 
-export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, isProcessing, isApproving }: Props) {
+export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, onGoBack, isProcessing, isApproving }: Props) {
   const [showPreview, setShowPreview] = useState(false);
   const [emailInput, setEmailInput] = useState("");
   const [showEmailForm, setShowEmailForm] = useState(false);
@@ -52,6 +53,7 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, is
       onProcess={onProcess}
       onApprove={onApprove}
       onRedo={onRedo}
+      onGoBack={onGoBack}
       isProcessing={isProcessing}
       isApproving={isApproving}
       resultContent={

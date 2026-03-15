@@ -90,6 +90,7 @@ export default function ProjectWizard() {
     onProcess: () => handleProcess(step),
     onApprove: () => handleApprove(step),
     onRedo: () => handleRedo(step),
+    onGoBack: step > 1 ? () => handleRedo(step - 1) : undefined,
     isProcessing: processStep.isPending,
     isApproving: approveStep.isPending,
   });
