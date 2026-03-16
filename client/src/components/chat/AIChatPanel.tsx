@@ -84,7 +84,7 @@ export function AIChatPanel({ messages, isLoading, onSendMessage, compact = fals
                   ? "bg-primary text-white rounded-br-md"
                   : msg.role === "system"
                   ? "bg-accent/10 text-accent-foreground border border-accent/20 italic rounded-bl-md"
-                  : "bg-slate-100 text-foreground rounded-bl-md"
+                  : "bg-slate-100 text-slate-800 rounded-bl-md"
               )} data-testid={`chat-message-${i}`}>
                 <p className="whitespace-pre-wrap">{msg.content}</p>
               </div>
@@ -154,7 +154,7 @@ export function AIChatPanel({ messages, isLoading, onSendMessage, compact = fals
             <div className="bg-slate-100 rounded-2xl rounded-bl-md px-4 py-3">
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span className="text-xs text-muted-foreground">Đang tìm kiếm & phân tích...</span>
+                <span className="text-xs text-slate-500">Đang tìm kiếm & phân tích...</span>
               </div>
             </div>
           </div>
