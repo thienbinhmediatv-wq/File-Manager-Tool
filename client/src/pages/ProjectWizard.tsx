@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useParams, Link, useLocation } from "wouter";
-import { ChevronLeft, Check, Camera, Ruler, Layout, Box, Sofa, Image, FileText, MessageCircle, X } from "lucide-react";
+import { ChevronLeft, Check, Camera, Ruler, Layout, Box, Sofa, Image, FileText } from "lucide-react";
 import { useProject, useProcessStep, useApproveStep, useRedoStep, useSubmitStep } from "@/hooks/use-projects";
 import { useChat } from "@/hooks/use-chat";
-import { AIChatPanel } from "@/components/chat/AIChatPanel";
+import { FloatingChatCopilot } from "@/components/chat/FloatingChatCopilot";
 import { Step1DataCollection } from "@/components/steps/Step1DataCollection";
 import { Step2Analysis } from "@/components/steps/Step2Analysis";
 import { Step3CAD } from "@/components/steps/Step3CAD";
@@ -45,9 +45,20 @@ export default function ProjectWizard() {
   const approveStep = useApproveStep();
   const redoStep = useRedoStep();
   const submitStep = useSubmitStep();
-  const { messages, isLoading: chatLoading, sendMessage, addSystemMessage, loadHistory } = useChat(projectId);
+  const {
+    messages,
+    isLoading: chatLoading,
+    unreadCount,
+    sendMessage,
+    addSystemMessage,
+    loadHistory,
+    markRead,
+    markClosed,
+    sendStepGuidance,
+    resetIdleTimer,
+    checkFormReactions,
+  } = useChat(projectId);
   const [, navigate] = useLocation();
-  const [showMobileChat, setShowMobileChat] = useState(false);
 
   useEffect(() => {
     if (project && messages.length === 0) {
@@ -62,6 +73,52 @@ export default function ProjectWizard() {
     }
   }, [project?.id]);
 
+  const currentStep = project?.currentStep || 1;
+
+  useEffect(() => {
+    if (project) {
+      sendStepGuidance(currentStep);
+    }
+  }, [currentStep, project?.id, sendStepGuidance]);
+
+  useEffect(() => {
+    if (!project) return;
+    checkFormReactions({
+      landWidth: project.landWidth,
+      landLength: project.landLength,
+      floors: project.floors,
+      bedrooms: project.bedrooms,
+      bathrooms: project.bathrooms,
+      style: project.style || undefined,
+      budget: project.budget,
+      selectedInteriorStyle: project.selectedInteriorStyle || undefined,
+    });
+  }, [
+    project?.landWidth,
+    project?.landLength,
+    project?.floors,
+    project?.bedrooms,
+    project?.bathrooms,
+    project?.style,
+    project?.budget,
+    checkFormReactions,
+  ]);
+
+  useEffect(() => {
+    if (!project) return;
+    resetIdleTimer(currentStep);
+
+    const handleActivity = () => resetIdleTimer(currentStep);
+    window.addEventListener("mousemove", handleActivity);
+    window.addEventListener("keydown", handleActivity);
+    window.addEventListener("touchstart", handleActivity);
+    return () => {
+      window.removeEventListener("mousemove", handleActivity);
+      window.removeEventListener("keydown", handleActivity);
+      window.removeEventListener("touchstart", handleActivity);
+    };
+  }, [currentStep, project?.id, resetIdleTimer]);
+
   if (isLoading || !project) {
     return (
       <div className="min-h-screen bg-background p-6">
@@ -75,7 +132,6 @@ export default function ProjectWizard() {
     );
   }
 
-  const currentStep = project.currentStep;
   const statuses = (project.stepStatuses || {}) as Record<string, string>;
 
   const getStepStatus = (step: number) => statuses[step] || "pending";
@@ -121,17 +177,6 @@ export default function ProjectWizard() {
             ✓ Hoàn thành
           </span>
         )}
-
-        <Button
-          variant="outline"
-          size="sm"
-          className="md:hidden rounded-lg gap-1.5 border-primary/30 text-primary"
-          onClick={() => setShowMobileChat(true)}
-          data-testid="button-open-chat"
-        >
-          <MessageCircle className="w-4 h-4" />
-          Chat
-        </Button>
       </header>
 
       <div className="px-3 sm:px-5 py-2.5 bg-white/60 dark:bg-slate-900/60 border-b border-border/30 overflow-x-auto">
@@ -172,8 +217,8 @@ export default function ProjectWizard() {
         </div>
       </div>
 
-      <div className="flex-1 flex min-h-0">
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:flex-none md:w-[60%]">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="max-w-4xl mx-auto">
           {currentStep === 1 && <Step1DataCollection {...stepProps(1)} onSubmit={(data) => handleSubmit(1, data)} isNewProject={false} />}
           {currentStep === 2 && <Step2Analysis {...stepProps(2)} />}
           {currentStep === 3 && <Step3CAD {...stepProps(3)} />}
@@ -190,36 +235,16 @@ export default function ProjectWizard() {
             </div>
           )}
         </div>
-
-        <div className="border-l border-border/50 hidden md:flex md:flex-col md:w-[40%] md:flex-none h-full">
-          <AIChatPanel
-            messages={messages}
-            isLoading={chatLoading}
-            onSendMessage={(msg) => sendMessage(msg, currentStep)}
-          />
-        </div>
       </div>
 
-      {showMobileChat && (
-        <div className="fixed inset-0 z-50 md:hidden flex flex-col bg-background">
-          <div className="h-13 border-b border-border/50 px-4 flex items-center justify-between bg-white/80 dark:bg-slate-900/80 backdrop-blur">
-            <div className="flex items-center gap-2">
-              <MessageCircle className="w-5 h-5 text-primary" />
-              <span className="font-semibold text-sm">AI Trợ lý thiết kế</span>
-            </div>
-            <Button variant="ghost" size="icon" onClick={() => setShowMobileChat(false)} className="rounded-lg">
-              <X className="w-5 h-5" />
-            </Button>
-          </div>
-          <div className="flex-1 min-h-0">
-            <AIChatPanel
-              messages={messages}
-              isLoading={chatLoading}
-              onSendMessage={(msg) => { sendMessage(msg, currentStep); }}
-            />
-          </div>
-        </div>
-      )}
+      <FloatingChatCopilot
+        messages={messages}
+        isLoading={chatLoading}
+        onSendMessage={(msg) => sendMessage(msg, currentStep)}
+        unreadCount={unreadCount}
+        onOpen={markRead}
+        onClose={markClosed}
+      />
     </div>
   );
 }

@@ -16,9 +16,10 @@ interface AIChatPanelProps {
   messages: ChatMessage[];
   isLoading: boolean;
   onSendMessage: (message: string) => void;
+  compact?: boolean;
 }
 
-export function AIChatPanel({ messages, isLoading, onSendMessage }: AIChatPanelProps) {
+export function AIChatPanel({ messages, isLoading, onSendMessage, compact = false }: AIChatPanelProps) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -44,20 +45,22 @@ export function AIChatPanel({ messages, isLoading, onSendMessage }: AIChatPanelP
   };
 
   return (
-    <div className="flex flex-col h-full bg-white/50 rounded-2xl border border-border/50 overflow-hidden" data-testid="chat-panel">
-      <div className="px-4 py-3 border-b border-border/50 flex items-center gap-2 bg-primary/5">
-        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-          <MessageSquare className="w-4 h-4 text-primary" />
+    <div className={cn("flex flex-col h-full overflow-hidden", !compact && "bg-white/50 rounded-2xl border border-border/50")} data-testid="chat-panel">
+      {!compact && (
+        <div className="px-4 py-3 border-b border-border/50 flex items-center gap-2 bg-primary/5">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+            <MessageSquare className="w-4 h-4 text-primary" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-sm">AI Trợ lý thiết kế</h3>
+            <p className="text-xs text-muted-foreground">Bmt Decor AI + Google Search + Drive Learning</p>
+          </div>
+          <div className="ml-auto flex items-center gap-1.5">
+            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            <span className="text-xs text-green-600 font-medium">Online</span>
+          </div>
         </div>
-        <div>
-          <h3 className="font-semibold text-sm">AI Trợ lý thiết kế</h3>
-          <p className="text-xs text-muted-foreground">Bmt Decor AI + Google Search + Drive Learning</p>
-        </div>
-        <div className="ml-auto flex items-center gap-1.5">
-          <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-          <span className="text-xs text-green-600 font-medium">Online</span>
-        </div>
-      </div>
+      )}
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         {messages.length === 0 && (

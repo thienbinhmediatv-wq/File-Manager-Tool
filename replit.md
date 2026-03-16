@@ -49,7 +49,7 @@ Each step (3-7) has a corresponding Cẩm nang (handbook) stored in `knowledge_f
 - `server/index.ts` - Express setup with Stripe webhook (BEFORE express.json), Stripe init
 - `client/src/pages/Dashboard.tsx` - Project list dashboard (navigates to /projects/new)
 - `client/src/pages/NewProjectWizard.tsx` - New project creation wizard (/projects/new)
-- `client/src/pages/ProjectWizard.tsx` - 7-step wizard with split-screen layout
+- `client/src/pages/ProjectWizard.tsx` - 7-step wizard with floating AI copilot (auto-greeting, form monitoring, step guidance, idle tips)
 - `client/src/pages/Settings.tsx` - AI Instructions, Knowledge Files upload, Stripe products
 - `client/src/pages/Guide.tsx` - Usage guide page (7-step process documentation)
 - `client/src/components/steps/Step1DataCollection.tsx` - Step 1 wrapper with 4 sub-steps navigation
@@ -58,7 +58,8 @@ Each step (3-7) has a corresponding Cẩm nang (handbook) stored in `knowledge_f
 - `client/src/components/steps/Step1Sub3Requirements.tsx` - Sub-step 1.3: Special requirements + file upload
 - `client/src/components/steps/Step1Sub4Confirmation.tsx` - Sub-step 1.4: Summary + AI process trigger
 - `client/src/components/steps/Step*.tsx` - Individual step components (2-7)
-- `client/src/components/chat/AIChatPanel.tsx` - AI chat panel
+- `client/src/components/chat/AIChatPanel.tsx` - AI chat panel (message list, input, send button)
+- `client/src/components/chat/FloatingChatCopilot.tsx` - Floating AI copilot: desktop popup (380x520px) + mobile draggable bubble with slide-up panel (80vh)
 - `client/src/components/layout/AppLayout.tsx` - Sidebar with logo, nav (Dashboard, Dự án, Hướng dẫn, Cài đặt)
 
 ## Database Tables
