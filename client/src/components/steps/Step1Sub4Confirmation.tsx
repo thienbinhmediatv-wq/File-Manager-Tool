@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Loader2, Building2, Ruler, BedDouble, Bath, Home, Palette, TreePine } from "lucide-react";
+import { Loader2, Building2, Ruler, BedDouble, Bath, Home, Palette, TreePine, Grid2X2, Layers } from "lucide-react";
 import type { Project } from "@shared/schema";
 
 const REQUIREMENTS_MAP: Record<string, string> = {
@@ -24,6 +24,12 @@ export function Step1Sub4Confirmation({ project, onProcess, onBack, isProcessing
   const reqs = (project.siteRequirements as Record<string, boolean>) || {};
   const activeReqs = Object.entries(reqs).filter(([, v]) => v);
   const arch = project.selectedArchitecture as { name: string; image: string } | null;
+
+  const w = Number(project.landWidth) || 0;
+  const l = Number(project.landLength) || 0;
+  const n = Number(project.floors) || 0;
+  const dtsd = (w * l * n).toFixed(2);
+  const dtxd = (w * l * (n + 1)).toFixed(2);
 
   return (
     <div className="space-y-6">
@@ -85,6 +91,18 @@ export function Step1Sub4Confirmation({ project, onProcess, onBack, isProcessing
               <Bath className="w-4 h-4 mx-auto text-primary mb-1" />
               <span className="text-muted-foreground text-xs block">Phòng WC</span>
               <p className="font-semibold">{project.bathrooms} phòng</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="bg-white dark:bg-slate-800 rounded-xl p-3 border border-border/30 text-center">
+              <Grid2X2 className="w-4 h-4 mx-auto text-primary mb-1" />
+              <span className="text-muted-foreground text-xs block">Tổng DTSD</span>
+              <p className="font-semibold" data-testid="text-confirm-dtsd">{dtsd} m²</p>
+            </div>
+            <div className="bg-white dark:bg-slate-800 rounded-xl p-3 border border-border/30 text-center">
+              <Layers className="w-4 h-4 mx-auto text-primary mb-1" />
+              <span className="text-muted-foreground text-xs block">Tổng DTXD</span>
+              <p className="font-semibold" data-testid="text-confirm-dtxd">{dtxd} m²</p>
             </div>
           </div>
         </div>
