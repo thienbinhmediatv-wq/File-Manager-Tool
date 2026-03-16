@@ -179,6 +179,7 @@ function generateFloorSVG(floor: GeometryFloor, geometry: GeometryResult): strin
   </defs>`;
 
   const elements: SvgEl[] = [];
+  const svgComments: string[] = [];
 
   const drawGridLocal = (lw: number, ll: number): SvgEl[] => {
     const els: SvgEl[] = [];
@@ -281,15 +282,27 @@ function generateFloorSVG(floor: GeometryFloor, geometry: GeometryResult): strin
     segments.sort((a, b) => a.start - b.start);
 
     let cursor = 0;
+    let segmentTotal = 0;
     for (const seg of segments) {
       if (seg.start > cursor + 0.01) {
-        elements.push(...drawDimHBelow(pxL(cursor), pxL(seg.start), bottomBaseY, fmtM(+(seg.start - cursor).toFixed(2)), hLayer));
+        const gap = +(seg.start - cursor).toFixed(2);
+        elements.push(...drawDimHBelow(pxL(cursor), pxL(seg.start), bottomBaseY, fmtM(gap), hLayer));
+        segmentTotal += gap;
       }
-      elements.push(...drawDimHBelow(pxL(seg.start), pxL(seg.end), bottomBaseY, fmtM(+(seg.end - seg.start).toFixed(2)), hLayer));
+      const segW = +(seg.end - seg.start).toFixed(2);
+      if (segW > 0) {
+        elements.push(...drawDimHBelow(pxL(seg.start), pxL(seg.end), bottomBaseY, fmtM(segW), hLayer));
+        segmentTotal += segW;
+      }
       cursor = seg.end;
     }
     if (cursor < landWidth - 0.01) {
-      elements.push(...drawDimHBelow(pxL(cursor), pxL(landWidth), bottomBaseY, fmtM(+(landWidth - cursor).toFixed(2)), hLayer));
+      const gap = +(landWidth - cursor).toFixed(2);
+      elements.push(...drawDimHBelow(pxL(cursor), pxL(landWidth), bottomBaseY, fmtM(gap), hLayer));
+      segmentTotal += gap;
+    }
+    if (Math.abs(segmentTotal - landWidth) > 0.05) {
+      svgComments.push(`<!-- WARNING: dimension row ${hLayer} segments sum=${segmentTotal.toFixed(2)} != landWidth=${landWidth} -->`);
     }
     hLayer++;
   }
@@ -341,12 +354,13 @@ function generateFloorSVG(floor: GeometryFloor, geometry: GeometryResult): strin
   );
 
   const bodyStr = elements.map(e => renderEl(e, 1)).join("\n");
+  const commentsStr = svgComments.length > 0 ? "\n" + svgComments.join("\n") : "";
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}">
   ${defs}
   <rect width="${svgW}" height="${svgH}" fill="white"/>
-  <!-- Floor plan: ${floorLabel} | ${landWidth}m x ${landLength}m | BMT Decor -->
+  <!-- Floor plan: ${floorLabel} | ${landWidth}m x ${landLength}m | BMT Decor -->${commentsStr}
 ${bodyStr}
 </svg>`;
 }

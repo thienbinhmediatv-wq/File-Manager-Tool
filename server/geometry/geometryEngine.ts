@@ -164,14 +164,23 @@ function positionRoomsOnFloor(
   const WALL_T = 0.15;
 
   for (const r of sorted) {
-    const rw = Math.min(r.w, landWidth - cursorX);
-    const rh = r.h;
-
-    if (cursorX + rw > landWidth + 0.01) {
+    if (cursorX >= landWidth - 0.01) {
       cursorX = 0;
       cursorY = round2(cursorY + rowMaxH + WALL_T);
       rowMaxH = 0;
     }
+
+    let rw = Math.min(r.w, landWidth - cursorX);
+
+    if (rw <= 0) {
+      cursorX = 0;
+      cursorY = round2(cursorY + rowMaxH + WALL_T);
+      rowMaxH = 0;
+      rw = Math.min(r.w, landWidth - cursorX);
+      if (rw <= 0) continue;
+    }
+
+    const rh = r.h;
 
     if (cursorY + rh > landLength + 0.5) {
       cursorX = 0;
