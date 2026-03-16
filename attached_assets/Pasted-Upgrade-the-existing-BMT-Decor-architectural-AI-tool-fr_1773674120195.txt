@@ -1,0 +1,167 @@
+Upgrade the existing BMT Decor architectural AI tool from an image-generation pipeline into a geometry-based architecture system while keeping the current UI and wizard workflow unchanged.
+
+Current system analysis (already verified):
+- Step 2 produces layoutResult JSON containing room names and width/height.
+- Step 3 generates CAD-like images using aiGenerateImage().
+- Step 4 generates facade images using AI prompts.
+- Step 5 interior images are AI generated.
+- Step 6 renders are AI image generation.
+- Step 7 PDF combines images using PDFKit.
+
+Goal:
+Introduce a real geometry data model so the system can later support real CAD and 3D generation.
+
+Do NOT remove existing steps or UI. Extend the backend architecture.
+
+------------------------------------------------
+PART 1 — CREATE GEOMETRY DATA MODEL
+------------------------------------------------
+
+Extend layoutResult into a full geometry structure.
+
+New structure example:
+
+{
+ "floors":[
+  {
+   "floor":1,
+   "rooms":[
+    {
+     "name":"Living Room",
+     "x":0,
+     "y":0,
+     "width":4.5,
+     "height":6
+    }
+   ],
+   "walls":[
+    {
+     "x1":0,
+     "y1":0,
+     "x2":4.5,
+     "y2":0,
+     "thickness":0.2
+    }
+   ],
+   "doors":[
+    {
+     "wallIndex":0,
+     "position":1.2,
+     "width":0.9
+    }
+   ],
+   "windows":[]
+  }
+ ]
+}
+
+Add coordinates (x,y) for each room.
+
+------------------------------------------------
+PART 2 — GEOMETRY ENGINE
+------------------------------------------------
+
+Create a new backend module:
+
+server/geometry/geometryEngine.ts
+
+Responsibilities:
+- Convert room dimensions into positioned rooms
+- Generate wall segments
+- Detect room adjacency
+- Calculate areas
+- Store geometry in database
+
+Output:
+geometryResult JSON stored in projects table.
+
+------------------------------------------------
+PART 3 — BASIC CAD GENERATOR
+------------------------------------------------
+
+Create module:
+
+server/cad/cadGenerator.ts
+
+This module should:
+- read geometryResult
+- generate a simple vector floor plan
+- export SVG
+
+Use libraries such as:
+- svg.js
+- d3
+- pure geometry math
+
+Output example:
+
+cadResult: {
+ "svgUrl": "/generated/floorplan.svg"
+}
+
+Keep existing AI image generation as fallback.
+
+------------------------------------------------
+PART 4 — FUTURE 3D MODEL STRUCTURE
+------------------------------------------------
+
+Add placeholder structure for future 3D model:
+
+model3dResult: {
+ "mesh": [],
+ "materials": [],
+ "levels": []
+}
+
+Do not implement full 3D yet. Only prepare the schema.
+
+------------------------------------------------
+PART 5 — KEEP EXISTING FEATURES
+------------------------------------------------
+
+Do NOT break:
+
+- React wizard steps
+- AI assistant chat
+- image generation pipeline
+- rendering prompts
+- PDF export
+
+Existing behavior must continue to work.
+
+------------------------------------------------
+PART 6 — UPDATE DATABASE SCHEMA
+------------------------------------------------
+
+Modify projects schema to include:
+
+geometryResult JSON
+cadVectorResult JSON
+
+without removing old fields.
+
+------------------------------------------------
+PART 7 — SYSTEM ARCHITECTURE TARGET
+------------------------------------------------
+
+New pipeline:
+
+User Input
+→ Layout JSON
+→ Geometry Engine
+→ CAD Generator
+→ AI Image Generation
+→ PDF Export
+
+This prepares the system for a real architectural engine in the future.
+
+------------------------------------------------
+IMPORTANT
+------------------------------------------------
+
+1. Do not refactor the UI.
+2. Do not remove aiGenerateImage().
+3. Add new modules in server folder.
+4. Keep backward compatibility with existing projects.
+
+Implement only the geometry + CAD foundation in this step.
