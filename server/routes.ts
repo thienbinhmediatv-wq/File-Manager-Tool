@@ -647,11 +647,12 @@ Trả lời chi tiết, đủ dữ liệu để vẽ CAD thực tế.` }
         const floors3 = layout3?.floors || [{ floor: 1, rooms: [] }];
 
         for (const floorData of floors3) {
-          const roomsList = floorData.rooms.map(r => `${r.name}(${r.w}m×${r.h}m)`).join(", ");
+          const roomsList = floorData.rooms.map(r => `${r.name}: ${r.w}x${r.h}m`).join(", ");
           const floorLabel = floorData.floor === 1 ? "TẦNG TRỆT" : `LẦU ${floorData.floor - 1}`;
-          const imagePrompt = `Professional architectural floor plan drawing, 2D top-down view, black thin lines on pure white background, Vietnamese residential house ${project.landWidth}m x ${project.landLength}m, ${floorLabel}, rooms: ${roomsList}, style ${project.style}.
-Features: 3-layer dimension lines (outer total, mid room sizes, inner setback ${setback}), grid reference circles bottom (1,2,3,4,5) and left letters (A,B,C,D), thick exterior walls 200mm, thin interior walls, door arcs, window openings, staircase with steps, furniture layout symbols (sofa, bed, toilet, sink).
-RIGHT SIDE vertical title block (155px wide): CHU DAU TU blank, THAM DINH THIET KE, T.T(No) revision table, MUC DICH PHAT HANH checkboxes (CO SO TK/TRINH DUYET/THI CONG/HIEU CHINH), DON VI THI CONG with BMT DECOR logo, DIRECTOR VO QUOC BAO, THIET KE DESIGNED BY, VE DRAWN BY, CONG TRINH PROJECT, DIA DIEM LOCATION, HANG MUC ITEM, TEN BAN VE DRAWING TITLE, TI LE 1/100 TONG SO BAN VE, SO BAN VE DRAWING No.
+          const imagePrompt = `Professional architectural floor plan drawing, 2D top-down view, black thin lines on pure white background, Vietnamese residential house ${project.landWidth}m x ${project.landLength}m, ${floorLabel}. Exact room dimensions: ${roomsList}. Style: ${project.style}.
+Ensure all horizontal dimension segments sum exactly to land width ${project.landWidth}m, all vertical dimension segments sum exactly to land length ${project.landLength}m.
+Features: 3-layer dimension lines (outer total land size, mid individual room sizes, inner setback ${setback}m), grid reference circles, thick exterior walls 200mm, thin interior walls, door arcs, window openings, staircase with steps, furniture layout symbols.
+RIGHT SIDE vertical title block: DON VI THI CONG BMT DECOR, DIRECTOR VO QUOC BAO, TI LE 1/100.
 Bottom label: MAT BANG ${floorLabel} TL: 1/100. Clean professional A/E standard drawing.`;
 
           const imgUrl = await aiGenerateImage(imagePrompt, id, `cad_floor_${floorData.floor}`);
