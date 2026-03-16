@@ -1,6 +1,6 @@
 import { StepWrapper } from "./StepWrapper";
 import type { Project } from "@shared/schema";
-import { FileText, Ruler, Layers, Grid3X3, ArrowUpDown, Building2 } from "lucide-react";
+import { FileText, Ruler, Layers, Grid3X3, ArrowUpDown, Building2, Download, GitBranch } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface Props {
@@ -18,6 +18,7 @@ interface Props {
 export function Step3CAD({ project, stepStatus, onProcess, onApprove, onRedo, onGoBack, backLabel, isProcessing, isApproving }: Props) {
   const cadResult = project.cadResult as {
     cadDrawings?: Array<{ name: string; type: string; imageUrl?: string; floor?: number }>;
+    svgFloorplans?: Array<{ floor: number; floorLabel: string; svgUrl: string }>;
     cadDescription?: string;
     dimensions?: {
       totalArea: number;
@@ -30,6 +31,8 @@ export function Step3CAD({ project, stepStatus, onProcess, onApprove, onRedo, on
       scale?: string;
     };
   } | null;
+
+  const hasSVG = (cadResult?.svgFloorplans?.length ?? 0) > 0;
 
   return (
     <StepWrapper
@@ -98,12 +101,64 @@ export function Step3CAD({ project, stepStatus, onProcess, onApprove, onRedo, on
               </div>
             )}
 
+            {/* SVG Vector Floor Plans (Geometry-based) */}
+            {hasSVG && (
+              <div>
+                <h3 className="font-semibold flex items-center gap-2 mb-3">
+                  <GitBranch className="w-4 h-4 text-green-600" />
+                  Mặt bằng Vector (Geometry Engine)
+                  <Badge className="bg-green-100 text-green-700 text-xs">SVG · Dữ liệu thực</Badge>
+                </h3>
+                <div className="space-y-4">
+                  {cadResult?.svgFloorplans?.map((svgFp, i) => (
+                    <div key={i} className="rounded-xl overflow-hidden border-2 border-green-200 shadow-sm" data-testid={`svg-floorplan-${i}`}>
+                      <div className="bg-green-800 text-white px-4 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <GitBranch className="w-4 h-4 text-green-300" />
+                          <span className="font-bold text-sm">{svgFp.floorLabel} — Vector CAD</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs border-green-300 text-green-200">Geometry-based</Badge>
+                          <a
+                            href={svgFp.svgUrl}
+                            download={`mat-bang-tang-${svgFp.floor}.svg`}
+                            className="flex items-center gap-1 text-xs text-green-200 hover:text-white transition-colors"
+                            data-testid={`download-svg-${i}`}
+                          >
+                            <Download className="w-3 h-3" />
+                            Tải SVG
+                          </a>
+                        </div>
+                      </div>
+                      <div className="bg-white p-2 overflow-x-auto">
+                        <img
+                          src={svgFp.svgUrl}
+                          alt={`Mặt bằng ${svgFp.floorLabel}`}
+                          className="w-full object-contain"
+                          style={{ minHeight: "280px", maxHeight: "600px" }}
+                        />
+                      </div>
+                      <div className="bg-green-50 border-t border-green-200 px-4 py-2 text-xs text-green-700 flex justify-between">
+                        <span>Tọa độ phòng: X, Y thực tế</span>
+                        <span>Tường: 200mm ngoài / 120mm trong</span>
+                        <span>BMT DECOR Geometry Engine v1</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* CAD Floor Plan Images */}
             <div>
               <h3 className="font-semibold flex items-center gap-2 mb-3">
                 <FileText className="w-4 h-4 text-primary" />
                 Bản vẽ Mặt bằng từng tầng
-                <Badge className="bg-orange-100 text-orange-700 text-xs">A/E Standard</Badge>
+                {hasSVG ? (
+                  <Badge className="bg-slate-100 text-slate-600 text-xs">AI Reference</Badge>
+                ) : (
+                  <Badge className="bg-orange-100 text-orange-700 text-xs">A/E Standard</Badge>
+                )}
               </h3>
 
               <div className="space-y-4">

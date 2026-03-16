@@ -11,6 +11,8 @@ import * as jose from "jose";
 import sharp from "sharp";
 import { sendPdfEmail } from "./emailService";
 import { getDriveKnowledge, listDriveFiles, clearDriveCache, processAllDriveFiles, getOcrProgress } from "./driveKnowledge";
+import { generateGeometry } from "./geometry/geometryEngine.js";
+import { generateCADSVG } from "./cad/cadGenerator.js";
 
 const SERPAPI_KEY = process.env.SERPAPI_KEY || "";
 const ARTIFICIAL_STUDIO_KEY = process.env.ARTIFICIAL_STUDIO_API_KEY || "";
@@ -507,6 +509,21 @@ CHỈ trả về JSON, không giải thích.` }
           };
         }
 
+        let geometryData = null;
+        try {
+          if (layoutData?.floors && Array.isArray(layoutData.floors)) {
+            geometryData = generateGeometry(
+              project.landWidth,
+              project.landLength,
+              layoutData.floors,
+              (project.siteRequirements as Record<string, boolean>) || {}
+            );
+            console.log(`Step 2: Geometry generated for project ${id} — ${geometryData.floors.length} floor(s), ${geometryData.validation.totalFloorArea}m² total`);
+          }
+        } catch (geoErr) {
+          console.error("Geometry generation error (non-fatal):", geoErr);
+        }
+
         result = {
           analysis: {
             dimensions: `${project.landWidth}m x ${project.landLength}m`,
@@ -514,6 +531,7 @@ CHỈ trả về JSON, không giải thích.` }
             aiAnalysis: analysisText,
           },
           layout: layoutData,
+          geometry: geometryData,
           aiSuggestion: analysisText,
         };
 
@@ -592,8 +610,32 @@ Bottom label: MAT BANG ${floorLabel} TL: 1/100. Clean professional A/E standard 
           cadDrawings.push({ name: `Mặt bằng ${floorLabel}`, type: "floorplan", imageUrl: imgUrl, floor: floorData.floor });
         }
 
+        let svgFloorplans: Array<{ floor: number; floorLabel: string; svgUrl: string }> = [];
+        try {
+          const existingGeometry = project.geometryResult as import("./geometry/geometryEngine.js").GeometryResult | null;
+          const layout3ForGeo = layout3;
+          if (existingGeometry?.floors) {
+            const cadSvgs = generateCADSVG(existingGeometry, id);
+            svgFloorplans = cadSvgs.map(f => ({ floor: f.floor, floorLabel: f.floorLabel, svgUrl: f.svgUrl }));
+            console.log(`Step 3: SVG floor plans generated for project ${id} — ${svgFloorplans.length} floor(s)`);
+          } else if (layout3ForGeo?.floors) {
+            const freshGeo = generateGeometry(
+              project.landWidth,
+              project.landLength,
+              layout3ForGeo.floors,
+              (project.siteRequirements as Record<string, boolean>) || {}
+            );
+            const cadSvgs = generateCADSVG(freshGeo, id);
+            svgFloorplans = cadSvgs.map(f => ({ floor: f.floor, floorLabel: f.floorLabel, svgUrl: f.svgUrl }));
+            console.log(`Step 3: SVG floor plans generated (fresh geometry) for project ${id}`);
+          }
+        } catch (svgErr) {
+          console.error("SVG CAD generation error (non-fatal):", svgErr);
+        }
+
         result = {
           cadDrawings,
+          svgFloorplans,
           cadDescription: cadText,
           dimensions: {
             totalArea: area * project.floors,
@@ -1296,8 +1338,16 @@ Trả lời chi tiết, có con số thực tế.` }
       if (step === 2) {
         updateData.analysisResult = (result as { analysis: unknown }).analysis;
         updateData.layoutResult = (result as { layout: unknown }).layout;
+        if ((result as { geometry: unknown }).geometry) {
+          updateData.geometryResult = (result as { geometry: unknown }).geometry;
+        }
       }
-      if (step === 3) updateData.cadResult = result;
+      if (step === 3) {
+        updateData.cadResult = result;
+        if ((result as { svgFloorplans: unknown[] }).svgFloorplans?.length) {
+          updateData.cadVectorResult = (result as { svgFloorplans: unknown[] }).svgFloorplans;
+        }
+      }
       if (step === 4) updateData.model3dResult = result;
       if (step === 5) updateData.interiorResult = result;
       if (step === 6) updateData.renderResult = result;
