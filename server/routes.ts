@@ -12,7 +12,55 @@ import sharp from "sharp";
 import { sendPdfEmail } from "./emailService";
 import { getDriveKnowledge, listDriveFiles, clearDriveCache, processAllDriveFiles, getOcrProgress } from "./driveKnowledge";
 import { generateGeometry } from "./geometry/geometryEngine.js";
+import type { GeometryResult } from "./geometry/geometryEngine.js";
 import { generateCADSVG } from "./cad/cadGenerator.js";
+
+function buildBuildingDNA(geometryResult: GeometryResult, project: { floors: number; style: string; landWidth: number; landLength: number }): string {
+  const floorDescriptions: string[] = [];
+  const sortedFloors = [...geometryResult.floors].sort((a, b) => a.floor - b.floor);
+  for (const floor of sortedFloors) {
+    const roomCounts: Record<string, number> = {};
+    for (const room of floor.rooms) {
+      const fn = room.function || "other";
+      roomCounts[fn] = (roomCounts[fn] || 0) + 1;
+    }
+    const roomSummary = Object.entries(roomCounts)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([fn, count]) => `${count}x ${fn}`)
+      .join(", ");
+    const doorCount = floor.doors.length;
+    const windowCount = floor.windows.length;
+    floorDescriptions.push(
+      `Floor ${floor.floor}: rooms=[${roomSummary}], ${doorCount} doors, ${windowCount} windows`
+    );
+  }
+
+  const hasGarage = sortedFloors.some(f => f.rooms.some(r => r.function === "garage"));
+  const hasBalcony = sortedFloors.some(f => f.rooms.some(r => r.function === "balcony"));
+  const balconyFloors = sortedFloors
+    .filter(f => f.rooms.some(r => r.function === "balcony"))
+    .map(f => f.floor);
+
+  const style = project.style || "";
+  let roofType = "flat roof";
+  if (/mái thái|thai/i.test(style)) roofType = "Thai-style hipped roof with tiles";
+  else if (/mái nhật|japan/i.test(style)) roofType = "Japanese-style sloped roof";
+  else if (/cổ điển|tân cổ|classic|colonial/i.test(style)) roofType = "pitched/gabled roof with decorative cornice";
+  else if (/hiện đại|modern|minimalist/i.test(style)) roofType = "flat roof with parapet";
+
+  const parts = [
+    `${project.floors}-story Vietnamese residential house`,
+    `${project.landWidth}m wide x ${project.landLength}m deep lot`,
+    `style: ${style}`,
+    `roof: ${roofType}`,
+    hasGarage ? "ground floor includes garage" : "no garage",
+    hasBalcony ? `balcony on floor(s) ${balconyFloors.join(",")}` : "no balcony",
+    ...floorDescriptions,
+  ];
+
+  return parts.join("; ");
+}
+
 
 const SERPAPI_KEY = process.env.SERPAPI_KEY || "";
 const ARTIFICIAL_STUDIO_KEY = process.env.ARTIFICIAL_STUDIO_API_KEY || "";
@@ -652,11 +700,18 @@ Bottom label: MAT BANG ${floorLabel} TL: 1/100. Clean professional A/E standard 
       } else if (step === 4) {
         const facadeStyle = project.facadeStyle || project.style;
 
+        let dnaAnchor = "";
+        const geo4 = project.geometryResult as GeometryResult | null;
+        if (geo4?.floors?.length) {
+          const dna = buildBuildingDNA(geo4, project);
+          dnaAnchor = `FIXED BUILDING STRUCTURE — do not alter between renders: ${dna}. ONLY change: `;
+        }
+
         const facadePrompts = [
-          { name: "facade_day", prompt: `Exterior facade of a beautiful ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture style, ${project.landWidth}m wide frontage, daytime with blue sky, professional architectural visualization, photorealistic, lush tropical landscaping, clean design` },
-          { name: "facade_night", prompt: `Exterior facade of a beautiful ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture style, ${project.landWidth}m wide, night time with warm interior lighting glowing through windows, professional architectural visualization, photorealistic, ambient outdoor lighting` },
-          { name: "facade_angle45", prompt: `45-degree angle view of a ${project.floors}-story Vietnamese residential house, ${facadeStyle} style, showing side wall and front facade, ${project.landWidth}m x ${project.landLength}m lot, daytime, lush garden, professional 3D render, photorealistic` },
-          { name: "facade_aerial", prompt: `Aerial bird's eye view of a ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture, showing rooftop and surrounding landscape, ${project.landWidth}m x ${project.landLength}m lot, professional architectural visualization, photorealistic, urban context` },
+          { name: "facade_day", prompt: `${dnaAnchor ? dnaAnchor + "daytime lighting and blue sky. " : ""}Exterior facade of a beautiful ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture style, ${project.landWidth}m wide frontage, daytime with blue sky, professional architectural visualization, photorealistic, lush tropical landscaping, clean design` },
+          { name: "facade_night", prompt: `${dnaAnchor ? dnaAnchor + "nighttime lighting with warm interior glow. " : ""}Exterior facade of a beautiful ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture style, ${project.landWidth}m wide, night time with warm interior lighting glowing through windows, professional architectural visualization, photorealistic, ambient outdoor lighting` },
+          { name: "facade_angle45", prompt: `${dnaAnchor ? dnaAnchor + "45-degree camera angle, daytime. " : ""}45-degree angle view of a ${project.floors}-story Vietnamese residential house, ${facadeStyle} style, showing side wall and front facade, ${project.landWidth}m x ${project.landLength}m lot, daytime, lush garden, professional 3D render, photorealistic` },
+          { name: "facade_aerial", prompt: `${dnaAnchor ? dnaAnchor + "aerial bird's eye camera angle. " : ""}Aerial bird's eye view of a ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture, showing rooftop and surrounding landscape, ${project.landWidth}m x ${project.landLength}m lot, professional architectural visualization, photorealistic, urban context` },
         ];
 
         const facadeImages: string[] = [];
@@ -788,10 +843,18 @@ Trả lời chi tiết, có con số thực tế.` }
         const isHighBudget6 = project.budget > 1500;
         const lightingDir = dir6.includes("Tây") ? "warm golden afternoon sunlight from west, sun shade louvers casting shadows" : dir6.includes("Đông") ? "fresh morning light from east, cool bright atmosphere" : "soft neutral natural light, overcast sky";
         const matDescriptor = isHighBudget6 ? "luxury Marble/Granite stone, natural Sồi wood veneer, gold inox trim details, tempered glass 12mm" : "quality paint finish, porcelain tiles, aluminum windows, engineered wood";
+
+        let dnaAnchor6 = "";
+        const geo6 = project.geometryResult as GeometryResult | null;
+        if (geo6?.floors?.length) {
+          const dna = buildBuildingDNA(geo6, project);
+          dnaAnchor6 = `FIXED BUILDING STRUCTURE — do not alter between renders: ${dna}. ONLY change: `;
+        }
+
         const renderPrompts = [
-          { name: "Mặt tiền ban ngày", prompt: `Hyper-photorealistic exterior render ${project.floors}-story ${project.style} Vietnamese house, ${project.landWidth}m wide x ${project.landLength}m deep, ${lightingDir}, ${matDescriptor}, surrounding context: neighbor houses both sides, tropical trees, power poles on street matching 80% real site, professional architectural visualization, 8K, no noise` },
-          { name: "Mặt tiền ban đêm", prompt: `Hyper-photorealistic exterior night render ${project.floors}-story ${project.style} Vietnamese house, ${project.landWidth}m wide, warm glow from interior through windows, IES spot lights uplighting facade, landscape LED ground lights, dramatic night sky, ${matDescriptor}, 8K quality no noise` },
-          { name: "Góc 45 độ ban ngày", prompt: `Photorealistic 45-degree angle exterior view ${project.floors}-story ${project.style} Vietnamese house ${project.landWidth}m x ${project.landLength}m, showing side and front facade, ${lightingDir}, tropical landscaping local species, ${matDescriptor}, eye-level 1.6m camera height, professional architectural visualization 8K` },
+          { name: "Mặt tiền ban ngày", prompt: `${dnaAnchor6 ? dnaAnchor6 + "daytime lighting, materials, and landscaping. " : ""}Hyper-photorealistic exterior render ${project.floors}-story ${project.style} Vietnamese house, ${project.landWidth}m wide x ${project.landLength}m deep, ${lightingDir}, ${matDescriptor}, surrounding context: neighbor houses both sides, tropical trees, power poles on street matching 80% real site, professional architectural visualization, 8K, no noise` },
+          { name: "Mặt tiền ban đêm", prompt: `${dnaAnchor6 ? dnaAnchor6 + "nighttime lighting and atmosphere. " : ""}Hyper-photorealistic exterior night render ${project.floors}-story ${project.style} Vietnamese house, ${project.landWidth}m wide, warm glow from interior through windows, IES spot lights uplighting facade, landscape LED ground lights, dramatic night sky, ${matDescriptor}, 8K quality no noise` },
+          { name: "Góc 45 độ ban ngày", prompt: `${dnaAnchor6 ? dnaAnchor6 + "45-degree camera angle, daytime. " : ""}Photorealistic 45-degree angle exterior view ${project.floors}-story ${project.style} Vietnamese house ${project.landWidth}m x ${project.landLength}m, showing side and front facade, ${lightingDir}, tropical landscaping local species, ${matDescriptor}, eye-level 1.6m camera height, professional architectural visualization 8K` },
           { name: "Phòng khách", prompt: `Hyper-photorealistic interior render ${project.style} Vietnamese living room, ${matDescriptor}, eye-level camera 1.6m, 3-layer lighting (ambient ceiling recessed, task lamps, accent LED strip khe trần), 600mm clearance between furniture, life-like: books vase flowers tropical plant in corner, warm inviting atmosphere, 8K no noise no color shift` },
           { name: "Phòng ngủ Master", prompt: `Photorealistic ${project.style} master bedroom Vietnamese house, ${matDescriptor}, bed headboard against solid wall (feng shui), warm ambient 3-layer lighting, wide-angle no distortion on vertical walls, soft bedding textures, motion blur human silhouette for scale, 8K quality` },
           { name: "Phòng bếp & ăn", prompt: `Photorealistic Vietnamese ${project.style} kitchen dining, golden triangle layout stove-sink-fridge, ${matDescriptor}, pendant lights over dining, backsplash tiles detail, life-like: cookbook fruit bowl on counter, ${lightingDir} through window, 8K professional interior visualization` },
