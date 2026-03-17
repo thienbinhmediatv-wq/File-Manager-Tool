@@ -303,7 +303,90 @@ async function aiChat(messages: Array<{role: string; content: string}>, maxToken
   return completion.choices[0]?.message?.content || "";
 }
 
-async function aiGenerateImage(prompt: string, projectId: number, name: string): Promise<string> {
+async function resolveReferenceToBuffer(reference: string): Promise<Buffer> {
+  if (reference.startsWith("data:")) {
+    const base64Data = reference.replace(/^data:image\/\w+;base64,/, "");
+    return Buffer.from(base64Data, "base64");
+  }
+  const fetchMod = await import("node-fetch");
+  const fetchFn = fetchMod.default;
+  const res = await fetchFn(reference);
+  if (!res.ok) throw new Error(`Failed to fetch reference image: ${res.status}`);
+  const arrayBuffer = await res.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
+async function aiGenerateImage(prompt: string, projectId: number, name: string, referenceImage?: string): Promise<string> {
+  if (referenceImage) {
+    let usedEdit = false;
+    try {
+      const imageBuffer = await resolveReferenceToBuffer(referenceImage);
+      const toFile = (await import("openai")).toFile;
+      const imageFile = await toFile(imageBuffer, "reference.png", { type: "image/png" });
+      const editResponse = await openai.images.edit({
+        model: "gpt-image-1",
+        image: imageFile,
+        prompt,
+        n: 1,
+        size: "1024x1024",
+      });
+      const b64Edit = editResponse.data[0]?.b64_json;
+      if (b64Edit) {
+        usedEdit = true;
+        console.log(`[2-pass] edit succeeded for "${name}"`);
+        return `data:image/png;base64,${b64Edit}`;
+      }
+      const urlEdit = editResponse.data[0]?.url;
+      if (urlEdit) {
+        usedEdit = true;
+        console.log(`[2-pass] edit succeeded (url) for "${name}"`);
+        return urlEdit;
+      }
+    } catch (editErr: unknown) {
+      const msg = editErr instanceof Error ? editErr.message : String(editErr);
+      console.log(`[2-pass] images.edit failed for "${name}", falling back to GPT-4o Vision + generate. Error: ${msg}`);
+    }
+
+    if (!usedEdit) {
+      try {
+        const visionResp = await openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "image_url",
+                  image_url: { url: referenceImage },
+                },
+                {
+                  type: "text",
+                  text: "Describe this building's architecture in extreme detail: facade design, number of floors, roof shape, window layout, balconies, columns, materials, colors, overall massing and proportions. Be very specific so another AI can recreate the exact same building.",
+                },
+              ],
+            },
+          ],
+          max_tokens: 500,
+        });
+        const buildingDesc = visionResp.choices[0]?.message?.content || "";
+        console.log(`[2-pass] GPT-4o Vision description obtained for "${name}", length=${buildingDesc.length}`);
+        const enhancedPrompt = `EXACT BUILDING REFERENCE — The building must match this precise architectural description: ${buildingDesc}. Now render: ${prompt}`;
+        const genResp = await openai.images.generate({
+          model: "gpt-image-1",
+          prompt: enhancedPrompt,
+          n: 1,
+          size: "1024x1024",
+        });
+        const b64Gen = genResp.data[0]?.b64_json;
+        if (b64Gen) return `data:image/png;base64,${b64Gen}`;
+        const urlGen = genResp.data[0]?.url;
+        if (urlGen) return urlGen;
+      } catch (visionErr: unknown) {
+        const msg = visionErr instanceof Error ? visionErr.message : String(visionErr);
+        console.log(`[2-pass] Vision fallback also failed for "${name}": ${msg}. Falling through to plain generate.`);
+      }
+    }
+  }
   const response = await openai.images.generate({
     model: "gpt-image-1",
     prompt,
@@ -708,16 +791,18 @@ Bottom label: MAT BANG ${floorLabel} TL: 1/100. Clean professional A/E standard 
           dnaAnchor = `FIXED BUILDING STRUCTURE — do not alter between renders: ${dna}. ONLY change: `;
         }
 
-        const facadePrompts = [
-          { name: "facade_day", prompt: `${dnaAnchor ? dnaAnchor + "daytime lighting and blue sky. " : ""}Exterior facade of a beautiful ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture style, ${project.landWidth}m wide frontage, daytime with blue sky, professional architectural visualization, photorealistic, lush tropical landscaping, clean design` },
-          { name: "facade_night", prompt: `${dnaAnchor ? dnaAnchor + "nighttime lighting with warm interior glow. " : ""}Exterior facade of a beautiful ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture style, ${project.landWidth}m wide, night time with warm interior lighting glowing through windows, professional architectural visualization, photorealistic, ambient outdoor lighting` },
-          { name: "facade_angle45", prompt: `${dnaAnchor ? dnaAnchor + "45-degree camera angle, daytime. " : ""}45-degree angle view of a ${project.floors}-story Vietnamese residential house, ${facadeStyle} style, showing side wall and front facade, ${project.landWidth}m x ${project.landLength}m lot, daytime, lush garden, professional 3D render, photorealistic` },
-          { name: "facade_aerial", prompt: `${dnaAnchor ? dnaAnchor + "aerial bird's eye camera angle. " : ""}Aerial bird's eye view of a ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture, showing rooftop and surrounding landscape, ${project.landWidth}m x ${project.landLength}m lot, professional architectural visualization, photorealistic, urban context` },
+        const basePrompt4 = `${dnaAnchor ? dnaAnchor + "daytime lighting and blue sky. " : ""}Exterior facade of a beautiful ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture style, ${project.landWidth}m wide frontage, daytime with blue sky, professional architectural visualization, photorealistic, lush tropical landscaping, clean design`;
+        const baseImage4 = await aiGenerateImage(basePrompt4, id, "facade_day");
+
+        const facadeVariants = [
+          { name: "facade_night", prompt: `Same exact building architecture and design as the reference image. ${dnaAnchor ? dnaAnchor + "nighttime lighting with warm interior glow. " : ""}Exterior facade of a beautiful ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture style, ${project.landWidth}m wide, night time with warm interior lighting glowing through windows, professional architectural visualization, photorealistic, ambient outdoor lighting` },
+          { name: "facade_angle45", prompt: `Same exact building architecture and design as the reference image. ${dnaAnchor ? dnaAnchor + "45-degree camera angle, daytime. " : ""}45-degree angle view of a ${project.floors}-story Vietnamese residential house, ${facadeStyle} style, showing side wall and front facade, ${project.landWidth}m x ${project.landLength}m lot, daytime, lush garden, professional 3D render, photorealistic` },
+          { name: "facade_aerial", prompt: `Same exact building architecture and design as the reference image. ${dnaAnchor ? dnaAnchor + "aerial bird's eye camera angle. " : ""}Aerial bird's eye view of a ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture, showing rooftop and surrounding landscape, ${project.landWidth}m x ${project.landLength}m lot, professional architectural visualization, photorealistic, urban context` },
         ];
 
-        const facadeImages: string[] = [];
-        for (const fp of facadePrompts) {
-          const url = await aiGenerateImage(fp.prompt, id, fp.name);
+        const facadeImages: string[] = [baseImage4];
+        for (const fp of facadeVariants) {
+          const url = await aiGenerateImage(fp.prompt, id, fp.name, baseImage4);
           facadeImages.push(url);
         }
 
@@ -852,17 +937,26 @@ Trả lời chi tiết, có con số thực tế.` }
           dnaAnchor6 = `FIXED BUILDING STRUCTURE — do not alter between renders: ${dna}. ONLY change: `;
         }
 
-        const renderPrompts = [
-          { name: "Mặt tiền ban ngày", prompt: `${dnaAnchor6 ? dnaAnchor6 + "daytime lighting, materials, and landscaping. " : ""}Hyper-photorealistic exterior render ${project.floors}-story ${project.style} Vietnamese house, ${project.landWidth}m wide x ${project.landLength}m deep, ${lightingDir}, ${matDescriptor}, surrounding context: neighbor houses both sides, tropical trees, power poles on street matching 80% real site, professional architectural visualization, 8K, no noise` },
-          { name: "Mặt tiền ban đêm", prompt: `${dnaAnchor6 ? dnaAnchor6 + "nighttime lighting and atmosphere. " : ""}Hyper-photorealistic exterior night render ${project.floors}-story ${project.style} Vietnamese house, ${project.landWidth}m wide, warm glow from interior through windows, IES spot lights uplighting facade, landscape LED ground lights, dramatic night sky, ${matDescriptor}, 8K quality no noise` },
-          { name: "Góc 45 độ ban ngày", prompt: `${dnaAnchor6 ? dnaAnchor6 + "45-degree camera angle, daytime. " : ""}Photorealistic 45-degree angle exterior view ${project.floors}-story ${project.style} Vietnamese house ${project.landWidth}m x ${project.landLength}m, showing side and front facade, ${lightingDir}, tropical landscaping local species, ${matDescriptor}, eye-level 1.6m camera height, professional architectural visualization 8K` },
+        const basePrompt6 = `${dnaAnchor6 ? dnaAnchor6 + "daytime lighting, materials, and landscaping. " : ""}Hyper-photorealistic exterior render ${project.floors}-story ${project.style} Vietnamese house, ${project.landWidth}m wide x ${project.landLength}m deep, ${lightingDir}, ${matDescriptor}, surrounding context: neighbor houses both sides, tropical trees, power poles on street matching 80% real site, professional architectural visualization, 8K, no noise`;
+        const baseImage6 = await aiGenerateImage(basePrompt6, id, "render_Mặt_tiền_ban_ngày");
+
+        const exteriorVariants6 = [
+          { name: "Mặt tiền ban đêm", prompt: `Same exact building architecture and design as the reference image. ${dnaAnchor6 ? dnaAnchor6 + "nighttime lighting and atmosphere. " : ""}Hyper-photorealistic exterior night render ${project.floors}-story ${project.style} Vietnamese house, ${project.landWidth}m wide, warm glow from interior through windows, IES spot lights uplighting facade, landscape LED ground lights, dramatic night sky, ${matDescriptor}, 8K quality no noise` },
+          { name: "Góc 45 độ ban ngày", prompt: `Same exact building architecture and design as the reference image. ${dnaAnchor6 ? dnaAnchor6 + "45-degree camera angle, daytime. " : ""}Photorealistic 45-degree angle exterior view ${project.floors}-story ${project.style} Vietnamese house ${project.landWidth}m x ${project.landLength}m, showing side and front facade, ${lightingDir}, tropical landscaping local species, ${matDescriptor}, eye-level 1.6m camera height, professional architectural visualization 8K` },
+        ];
+
+        const renders = [{ name: "Mặt tiền ban ngày", url: baseImage6, angle: "Mặt tiền ban ngày" }];
+        for (const r of exteriorVariants6) {
+          const url = await aiGenerateImage(r.prompt, id, `render_${r.name.replace(/\s/g, "_")}`, baseImage6);
+          renders.push({ name: r.name, url, angle: r.name });
+        }
+
+        const interiorPrompts6 = [
           { name: "Phòng khách", prompt: `Hyper-photorealistic interior render ${project.style} Vietnamese living room, ${matDescriptor}, eye-level camera 1.6m, 3-layer lighting (ambient ceiling recessed, task lamps, accent LED strip khe trần), 600mm clearance between furniture, life-like: books vase flowers tropical plant in corner, warm inviting atmosphere, 8K no noise no color shift` },
           { name: "Phòng ngủ Master", prompt: `Photorealistic ${project.style} master bedroom Vietnamese house, ${matDescriptor}, bed headboard against solid wall (feng shui), warm ambient 3-layer lighting, wide-angle no distortion on vertical walls, soft bedding textures, motion blur human silhouette for scale, 8K quality` },
           { name: "Phòng bếp & ăn", prompt: `Photorealistic Vietnamese ${project.style} kitchen dining, golden triangle layout stove-sink-fridge, ${matDescriptor}, pendant lights over dining, backsplash tiles detail, life-like: cookbook fruit bowl on counter, ${lightingDir} through window, 8K professional interior visualization` },
         ];
-
-        const renders = [];
-        for (const r of renderPrompts) {
+        for (const r of interiorPrompts6) {
           const url = await aiGenerateImage(r.prompt, id, `render_${r.name.replace(/\s/g, "_")}`);
           renders.push({ name: r.name, url, angle: r.name });
         }
