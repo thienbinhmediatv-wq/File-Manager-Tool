@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -225,6 +225,11 @@ export function useChat(projectId: number) {
         emailResult: data.emailResult,
       };
       setMessages(prev => [...prev, aiMsg]);
+
+      if (data.approveResult?.success) {
+        queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      }
 
       if (emailMatch || phoneMatch) {
         const contact = emailMatch ? emailMatch[0] : phoneMatch![0];

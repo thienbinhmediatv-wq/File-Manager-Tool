@@ -169,13 +169,17 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, on
                       onClick={async () => {
                         setIsSendingEmail(true);
                         try {
-                          const res = await apiRequest("POST", `/api/projects/${project.id}/send-email`, { email: emailInput.trim() });
+                          const res = await fetch(`/api/projects/${project.id}/send-email`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ email: emailInput.trim() }),
+                          });
                           const data = await res.json();
-                          if (data.success) {
+                          if (res.ok && data.success) {
                             setEmailSentSuccess(true);
                             toast({ title: "Gửi email thành công!", description: data.message });
                           } else {
-                            toast({ title: "Lỗi gửi email", description: data.message, variant: "destructive" });
+                            toast({ title: "Lỗi gửi email", description: data.message || "Không thể gửi email. Vui lòng thử lại.", variant: "destructive" });
                           }
                         } catch {
                           toast({ title: "Lỗi", description: "Không thể gửi email. Vui lòng thử lại.", variant: "destructive" });

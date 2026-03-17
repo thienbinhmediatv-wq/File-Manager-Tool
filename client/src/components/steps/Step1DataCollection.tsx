@@ -151,7 +151,7 @@ export function Step1DataCollection({
               </div>
               <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3">
                 <span className="text-muted-foreground">Diện tích</span>
-                <p className="font-semibold">{displayProject.landWidth * displayProject.landLength} m²</p>
+                <p className="font-semibold">{(displayProject.landWidth * displayProject.landLength).toFixed(2)} m²</p>
               </div>
               <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3">
                 <span className="text-muted-foreground">Số tầng</span>

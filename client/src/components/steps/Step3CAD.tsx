@@ -60,7 +60,7 @@ export function Step3CAD({ project, stepStatus, onProcess, onApprove, onRedo, on
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="flex justify-between bg-slate-800 rounded p-2">
                     <span className="text-slate-400">Tổng diện tích sàn</span>
-                    <span className="font-bold text-white">{cadResult.dimensions.totalArea} m²</span>
+                    <span className="font-bold text-white">{Number(cadResult.dimensions.totalArea).toFixed(2)} m²</span>
                   </div>
                   <div className="flex justify-between bg-slate-800 rounded p-2">
                     <span className="text-slate-400">Cao tầng thông thủy</span>
