@@ -11,9 +11,9 @@ import * as jose from "jose";
 import sharp from "sharp";
 import { sendPdfEmail } from "./emailService";
 import { getDriveKnowledge, listDriveFiles, clearDriveCache, processAllDriveFiles, getOcrProgress } from "./driveKnowledge";
-import { generateGeometry } from "./geometry/geometryEngine.js";
+import { generateGeometry, LayoutValidationError } from "./geometry/geometryEngine.js";
 import type { GeometryResult } from "./geometry/geometryEngine.js";
-import { generateCADSVG } from "./cad/cadGenerator.js";
+import { generateCADSVG, generateValidationErrorSVG } from "./cad/cadGenerator.js";
 
 function buildBuildingDNA(geometryResult: GeometryResult, project: { floors: number; style: string; landWidth: number; landLength: number }): string {
   const floorDescriptions: string[] = [];
@@ -641,6 +641,7 @@ CHỈ trả về JSON, không giải thích.` }
         }
 
         let geometryData = null;
+        let step2ValidationWarnings: string[] = [];
         try {
           if (layoutData?.floors && Array.isArray(layoutData.floors)) {
             geometryData = generateGeometry(
@@ -652,7 +653,12 @@ CHỈ trả về JSON, không giải thích.` }
             console.log(`Step 2: Geometry generated for project ${id} — ${geometryData.floors.length} floor(s), ${geometryData.validation.totalFloorArea}m² total`);
           }
         } catch (geoErr) {
-          console.error("Geometry generation error (non-fatal):", geoErr);
+          if (geoErr instanceof LayoutValidationError) {
+            step2ValidationWarnings = geoErr.validationWarnings;
+            console.warn(`Step 2: Layout validation warnings for project ${id}:`, step2ValidationWarnings);
+          } else {
+            console.error("Geometry generation error (non-fatal):", geoErr);
+          }
         }
 
         result = {
@@ -663,6 +669,7 @@ CHỈ trả về JSON, không giải thích.` }
           },
           layout: layoutData,
           geometry: geometryData,
+          layoutValidationWarnings: step2ValidationWarnings,
           aiSuggestion: analysisText,
         };
 
@@ -725,24 +732,11 @@ Yêu cầu mô tả ĐẦY ĐỦ:
 Trả lời chi tiết, đủ dữ liệu để vẽ CAD thực tế.` }
         ], 4000);
 
-        // Generate CAD floor plan images for each floor
-        const cadDrawings: Array<{ name: string; type: string; imageUrl: string; floor?: number }> = [];
+        // --- Ưu tiên 1: Sinh SVG kỹ thuật trước ---
+        let svgFloorplans: Array<{ floor: number; floorLabel: string; svgUrl: string }> = [];
+        let layoutValidationWarnings: string[] = [];
         const floors3 = layout3?.floors || [{ floor: 1, rooms: [] }];
 
-        for (const floorData of floors3) {
-          const roomsList = floorData.rooms.map(r => `${r.name}: ${r.w}x${r.h}m`).join(", ");
-          const floorLabel = floorData.floor === 1 ? "TẦNG TRỆT" : `LẦU ${floorData.floor - 1}`;
-          const imagePrompt = `Professional architectural floor plan drawing, 2D top-down view, black thin lines on pure white background, Vietnamese residential house ${project.landWidth}m x ${project.landLength}m, ${floorLabel}. Exact room dimensions: ${roomsList}. Style: ${project.style}.
-Ensure all horizontal dimension segments sum exactly to land width ${project.landWidth}m, all vertical dimension segments sum exactly to land length ${project.landLength}m.
-Features: 3-layer dimension lines (outer total land size, mid individual room sizes, inner setback ${setback}m), grid reference circles, thick exterior walls 200mm, thin interior walls, door arcs, window openings, staircase with steps, furniture layout symbols.
-RIGHT SIDE vertical title block: DON VI THI CONG BMT DECOR, DIRECTOR VO QUOC BAO, TI LE 1/100.
-Bottom label: MAT BANG ${floorLabel} TL: 1/100. Clean professional A/E standard drawing.`;
-
-          const imgUrl = await aiGenerateImage(imagePrompt, id, `cad_floor_${floorData.floor}`);
-          cadDrawings.push({ name: `Mặt bằng ${floorLabel}`, type: "floorplan", imageUrl: imgUrl, floor: floorData.floor });
-        }
-
-        let svgFloorplans: Array<{ floor: number; floorLabel: string; svgUrl: string }> = [];
         try {
           const existingGeometry = project.geometryResult as import("./geometry/geometryEngine.js").GeometryResult | null;
           const layout3ForGeo = layout3;
@@ -762,12 +756,49 @@ Bottom label: MAT BANG ${floorLabel} TL: 1/100. Clean professional A/E standard 
             console.log(`Step 3: SVG floor plans generated (fresh geometry) for project ${id}`);
           }
         } catch (svgErr) {
-          console.error("SVG CAD generation error (non-fatal):", svgErr);
+          if (svgErr instanceof LayoutValidationError) {
+            layoutValidationWarnings = svgErr.validationWarnings;
+            console.warn(`Step 3: Layout validation failed for project ${id}:`, layoutValidationWarnings);
+            try {
+              const errSvg = generateValidationErrorSVG(layoutValidationWarnings, id);
+              svgFloorplans = [{ floor: errSvg.floor, floorLabel: errSvg.floorLabel, svgUrl: errSvg.svgUrl }];
+            } catch (errSvgErr) {
+              console.error("Failed to generate validation error SVG:", errSvgErr);
+            }
+          } else {
+            console.error("SVG CAD generation error (non-fatal):", svgErr);
+          }
+        }
+
+        // --- Ưu tiên 2: AI image CHỈ là minh họa tham khảo, bỏ qua nếu layout lỗi ---
+        const cadDrawings: Array<{ name: string; type: string; imageUrl: string; floor?: number; label?: string }> = [];
+
+        if (layoutValidationWarnings.length === 0) {
+          for (const floorData of floors3) {
+            try {
+              const roomsList = floorData.rooms.map(r => `${r.name}: ${r.w}x${r.h}m`).join(", ");
+              const floorLabel = floorData.floor === 1 ? "TẦNG TRỆT" : `LẦU ${floorData.floor - 1}`;
+              const imagePrompt = `Vietnamese residential house floor plan illustration, 2D top-down sketch, ${project.landWidth}m x ${project.landLength}m, ${floorLabel}. Rooms: ${roomsList}. Style: ${project.style}. Architectural illustration for reference only.`;
+              const imgUrl = await aiGenerateImage(imagePrompt, id, `cad_floor_${floorData.floor}`);
+              cadDrawings.push({
+                name: `Minh họa ${floorLabel}`,
+                type: "illustration",
+                imageUrl: imgUrl,
+                floor: floorData.floor,
+                label: "Minh họa tham khảo - không đảm bảo tỷ lệ chính xác",
+              });
+            } catch (imgErr) {
+              console.error(`Step 3: AI illustration error for floor ${floorData.floor} (non-fatal):`, imgErr);
+            }
+          }
+        } else {
+          console.log(`Step 3: Bỏ qua AI illustration vì layout validation thất bại.`);
         }
 
         result = {
           cadDrawings,
           svgFloorplans,
+          layoutValidationWarnings,
           cadDescription: cadText,
           dimensions: {
             totalArea: area * project.floors,

@@ -74,6 +74,13 @@ export interface GeometryResult {
   };
 }
 
+export class LayoutValidationError extends Error {
+  constructor(public readonly validationWarnings: string[]) {
+    super(`Layout validation failed: ${validationWarnings.join("; ")}`);
+    this.name = "LayoutValidationError";
+  }
+}
+
 type RoomFunction = "living" | "kitchen" | "dining" | "bedroom" | "wc" | "garage" | "stair" | "corridor" | "balcony" | "other";
 
 const ROOM_FUNCTION_MAP: Record<string, RoomFunction> = {
@@ -121,6 +128,74 @@ function getSetback(landWidth: number): number {
   return landWidth <= 5 ? 1.2 : 1.4;
 }
 
+export function validateLayout(
+  rooms: RoomInput[],
+  landWidth: number,
+  landLength: number
+): string[] {
+  const warnings: string[] = [];
+  const landArea = landWidth * landLength;
+  const totalRoomArea = rooms.reduce((sum, r) => sum + r.w * r.h, 0);
+
+  if (totalRoomArea > landArea * 0.85) {
+    warnings.push(
+      `Tổng diện tích phòng (${totalRoomArea.toFixed(1)}m²) vượt quá 85% diện tích đất (${(landArea * 0.85).toFixed(1)}m²). Cần giảm kích thước phòng.`
+    );
+  }
+
+  for (const r of rooms) {
+    if (r.w > landWidth) {
+      warnings.push(
+        `Phòng "${r.name}" rộng ${r.w}m vượt quá chiều rộng khu đất ${landWidth}m.`
+      );
+    }
+    if (r.h > landLength) {
+      warnings.push(
+        `Phòng "${r.name}" dài ${r.h}m vượt quá chiều dài khu đất ${landLength}m.`
+      );
+    }
+  }
+
+  const WALL_T = 0.15;
+  let cursorX = 0;
+  let rowRoomNames: string[] = [];
+  let rowSum = 0;
+
+  for (const r of rooms) {
+    if (r.w > landWidth) {
+      cursorX = 0;
+      rowRoomNames = [];
+      rowSum = 0;
+      continue;
+    }
+
+    const neededWidth = cursorX === 0 ? r.w : cursorX + r.w;
+
+    if (neededWidth > landWidth + 0.01) {
+      if (rowRoomNames.length > 0 && rowSum + WALL_T > landWidth + 0.01) {
+        warnings.push(
+          `Hàng [${rowRoomNames.join(", ")}]: tổng chiều rộng phòng ${rowSum.toFixed(2)}m + tường ${WALL_T}m = ${(rowSum + WALL_T).toFixed(2)}m vượt chiều rộng khu đất ${landWidth}m.`
+        );
+      }
+      cursorX = 0;
+      rowRoomNames = [];
+      rowSum = 0;
+    }
+
+    rowRoomNames.push(r.name);
+    rowSum += r.w;
+    cursorX = round2(cursorX + r.w + WALL_T);
+  }
+
+  if (rowRoomNames.length > 0 && rowSum + WALL_T > landWidth + 0.01) {
+    warnings.push(
+      `Hàng [${rowRoomNames.join(", ")}]: tổng chiều rộng ${rowSum.toFixed(2)}m + tường ${WALL_T}m = ${(rowSum + WALL_T).toFixed(2)}m vượt chiều rộng khu đất ${landWidth}m.`
+    );
+  }
+
+  return warnings;
+}
+
 function positionRoomsOnFloor(
   rooms: RoomInput[],
   landWidth: number,
@@ -164,28 +239,26 @@ function positionRoomsOnFloor(
   const WALL_T = 0.15;
 
   for (const r of sorted) {
-    if (cursorX >= landWidth - 0.01) {
+    if (r.w > landWidth) {
+      console.warn(`[geometryEngine] CẢNH BÁO: Phòng "${r.name}" rộng ${r.w}m vượt chiều rộng khu đất ${landWidth}m — bỏ qua phòng này.`);
+      continue;
+    }
+
+    if (cursorX > 0 && cursorX + r.w > landWidth - 0.01) {
       cursorX = 0;
       cursorY = round2(cursorY + rowMaxH + WALL_T);
       rowMaxH = 0;
     }
 
-    let rw = Math.min(r.w, landWidth - cursorX);
-
-    if (rw <= 0) {
-      cursorX = 0;
-      cursorY = round2(cursorY + rowMaxH + WALL_T);
-      rowMaxH = 0;
-      rw = Math.min(r.w, landWidth - cursorX);
-      if (rw <= 0) continue;
+    if (cursorX === 0 && r.w > landWidth - 0.01) {
+      console.warn(`[geometryEngine] CẢNH BÁO: Phòng "${r.name}" (${r.w}m) không vừa dòng mới tại x=0 — bỏ qua.`);
+      continue;
     }
 
     const rh = r.h;
 
     if (cursorY + rh > landLength + 0.5) {
-      cursorX = 0;
-      cursorY = round2(cursorY + rowMaxH + WALL_T);
-      rowMaxH = 0;
+      console.warn(`[geometryEngine] CẢNH BÁO: Phòng "${r.name}" tại y=${cursorY} vượt chiều dài khu đất ${landLength}m.`);
     }
 
     positioned.push({
@@ -193,13 +266,13 @@ function positionRoomsOnFloor(
       name: r.name,
       x: round2(cursorX),
       y: round2(cursorY),
-      width: round2(rw),
+      width: round2(r.w),
       height: round2(rh),
-      area: round2(rw * rh),
+      area: round2(r.w * rh),
       function: r.fn,
     });
 
-    cursorX = round2(cursorX + rw + WALL_T);
+    cursorX = round2(cursorX + r.w + WALL_T);
     if (rh > rowMaxH) rowMaxH = rh;
   }
 
@@ -385,6 +458,21 @@ export function generateGeometry(
   const warnings: string[] = [];
   let totalFloorArea = 0;
 
+  for (const fl of floorsInput) {
+    const floorValidationWarnings = validateLayout(fl.rooms, landWidth, landLength);
+    if (floorValidationWarnings.length > 0) {
+      floorValidationWarnings.forEach(w => {
+        const msg = `Tầng ${fl.floor}: ${w}`;
+        console.warn(`[geometryEngine] ${msg}`);
+        warnings.push(msg);
+      });
+    }
+  }
+
+  if (warnings.length > 0) {
+    throw new LayoutValidationError(warnings);
+  }
+
   const geometryFloors: GeometryFloor[] = floorsInput.map((fl) => {
     const isGround = fl.floor === 1;
     const hasCoords = fl.rooms.length > 0 && fl.rooms[0].x !== undefined && fl.rooms[0].y !== undefined;
@@ -404,11 +492,24 @@ export function generateGeometry(
     const totalArea = round2(positionedRooms.reduce((sum, r) => sum + r.area, 0));
     totalFloorArea += totalArea;
 
-    if (positionedRooms.some(r => r.y + r.height > landLength + 0.5)) {
-      warnings.push(`Tầng ${fl.floor}: Một số phòng vượt quá chiều dài khu đất (${landLength}m)`);
+    const overflowY = positionedRooms.filter(r => r.y + r.height > landLength + 0.5);
+    const overflowX = positionedRooms.filter(r => r.x + r.width > landWidth + 0.1);
+
+    if (overflowY.length > 0) {
+      const names = overflowY.map(r => `"${r.name}"`).join(", ");
+      const overflowMsg = `Tầng ${fl.floor}: Phòng ${names} vượt quá chiều dài khu đất (${landLength}m) sau khi định vị.`;
+      console.warn(`[geometryEngine] ${overflowMsg}`);
+      warnings.push(overflowMsg);
     }
-    if (positionedRooms.some(r => r.x + r.width > landWidth + 0.1)) {
-      warnings.push(`Tầng ${fl.floor}: Một số phòng vượt quá chiều rộng khu đất (${landWidth}m)`);
+    if (overflowX.length > 0) {
+      const names = overflowX.map(r => `"${r.name}"`).join(", ");
+      const overflowMsg = `Tầng ${fl.floor}: Phòng ${names} vượt quá chiều rộng khu đất (${landWidth}m) sau khi định vị.`;
+      console.warn(`[geometryEngine] ${overflowMsg}`);
+      warnings.push(overflowMsg);
+    }
+
+    if (warnings.length > 0) {
+      throw new LayoutValidationError([...warnings]);
     }
 
     return {
