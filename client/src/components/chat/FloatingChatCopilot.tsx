@@ -17,6 +17,7 @@ interface FloatingChatCopilotProps {
   isLoading: boolean;
   onSendMessage: (message: string) => void;
   unreadCount: number;
+  currentStep?: number;
   onOpen?: () => void;
   onClose?: () => void;
 }
@@ -26,6 +27,7 @@ export function FloatingChatCopilot({
   isLoading,
   onSendMessage,
   unreadCount,
+  currentStep,
   onOpen,
   onClose,
 }: FloatingChatCopilotProps) {
@@ -157,6 +159,7 @@ export function FloatingChatCopilot({
                   isLoading={isLoading}
                   onSendMessage={onSendMessage}
                   compact
+                  allowFileUpload={currentStep === 3}
                 />
               </div>
             </div>
@@ -214,6 +217,7 @@ export function FloatingChatCopilot({
               isLoading={isLoading}
               onSendMessage={onSendMessage}
               compact
+              allowFileUpload={currentStep === 3}
             />
           </div>
         </div>

@@ -1,11 +1,13 @@
 import { StepWrapper } from "./StepWrapper";
 import type { Project } from "@shared/schema";
-import { FileText, Ruler, Layers, Grid3X3, ArrowUpDown, Building2, Download, GitBranch } from "lucide-react";
+import { FileText, Ruler, Layers, Grid3X3, ArrowUpDown, Building2, Download, GitBranch, AlertTriangle, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface Props {
   project: Project;
   stepStatus: string;
+  stepNumber?: number;
+  projectId?: number;
   onProcess: () => void;
   onApprove: () => void;
   onRedo: () => void;
@@ -15,7 +17,7 @@ interface Props {
   isApproving: boolean;
 }
 
-export function Step3CAD({ project, stepStatus, onProcess, onApprove, onRedo, onGoBack, backLabel, isProcessing, isApproving }: Props) {
+export function Step3CAD({ project, stepStatus, stepNumber, projectId, onProcess, onApprove, onRedo, onGoBack, backLabel, isProcessing, isApproving }: Props) {
   const cadResult = project.cadResult as {
     cadDrawings?: Array<{ name: string; type: string; imageUrl?: string; floor?: number }>;
     svgFloorplans?: Array<{ floor: number; floorLabel: string; svgUrl: string }>;
@@ -33,12 +35,16 @@ export function Step3CAD({ project, stepStatus, onProcess, onApprove, onRedo, on
   } | null;
 
   const hasSVG = (cadResult?.svgFloorplans?.length ?? 0) > 0;
+  const formattedErrors = (cadResult as any)?.formattedValidationErrors as Array<{ type: string; detail: string; consequence: string }> | undefined;
+  const hasValidationErrors = (formattedErrors?.length ?? 0) > 0 || ((cadResult as any)?.layoutValidationWarnings?.length ?? 0) > 0;
 
   return (
     <StepWrapper
       title="Bước 3: Bản vẽ CAD 2D chuẩn A/E"
       description="AI tạo mặt bằng từng tầng với title block BMT DECOR, dimension 3 lớp, grid references chuẩn kiến trúc."
       stepStatus={stepStatus}
+      stepNumber={stepNumber}
+      projectId={projectId}
       onProcess={onProcess}
       onApprove={onApprove}
       onRedo={onRedo}
@@ -49,6 +55,40 @@ export function Step3CAD({ project, stepStatus, onProcess, onApprove, onRedo, on
       resultContent={
         cadResult ? (
           <div className="space-y-5">
+
+            {/* Smart CAD Validation Errors */}
+            {hasValidationErrors && (
+              <div className="rounded-xl border-2 border-red-200 bg-red-50 p-4" data-testid="cad-validation-errors">
+                <div className="flex items-center gap-2 mb-3">
+                  <XCircle className="w-5 h-5 text-red-600 shrink-0" />
+                  <span className="font-bold text-sm text-red-700">LỖI KIỂM TRA LAYOUT CAD</span>
+                </div>
+                <div className="space-y-3">
+                  {formattedErrors?.length ? formattedErrors.map((err, i) => (
+                    <div key={i} className="bg-white border border-red-100 rounded-lg p-3">
+                      <div className="flex items-start gap-2 mb-1">
+                        <AlertTriangle className="w-4 h-4 text-orange-500 mt-0.5 shrink-0" />
+                        <span className="font-semibold text-sm text-red-700">{err.type}</span>
+                      </div>
+                      <p className="text-xs text-gray-700 mb-1 pl-6">{err.detail}</p>
+                      <p className="text-xs text-orange-700 font-medium pl-6">→ {err.consequence}</p>
+                    </div>
+                  )) : (cadResult as any)?.layoutValidationWarnings?.map((w: string, i: number) => (
+                    <div key={i} className="bg-white border border-red-100 rounded-lg p-3">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-orange-500 mt-0.5 shrink-0" />
+                        <p className="text-xs text-red-700">{w}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                  <p className="text-xs text-orange-800 font-medium">
+                    💡 Để khắc phục: Quay lại Bước 2 và điều chỉnh bố trí phòng sao cho tổng chiều rộng không vượt quá {project.landWidth}m và tổng diện tích không quá 85% × {(project.landWidth * project.landLength).toFixed(0)}m² = {(project.landWidth * project.landLength * 0.85).toFixed(0)}m².
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Technical Specs Bar */}
             {cadResult.dimensions && (

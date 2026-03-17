@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Loader2, MessageSquare, Globe, ExternalLink, Mail, CheckCircle2, XCircle } from "lucide-react";
+import { Send, Bot, User, Loader2, MessageSquare, Globe, ExternalLink, Mail, CheckCircle2, XCircle, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -17,12 +17,15 @@ interface AIChatPanelProps {
   isLoading: boolean;
   onSendMessage: (message: string) => void;
   compact?: boolean;
+  allowFileUpload?: boolean;
 }
 
-export function AIChatPanel({ messages, isLoading, onSendMessage, compact = false }: AIChatPanelProps) {
+export function AIChatPanel({ messages, isLoading, onSendMessage, compact = false, allowFileUpload = false }: AIChatPanelProps) {
   const [input, setInput] = useState("");
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -34,6 +37,7 @@ export function AIChatPanel({ messages, isLoading, onSendMessage, compact = fals
     const msg = input.trim();
     if (!msg || isLoading) return;
     setInput("");
+    setUploadedFileName(null);
     onSendMessage(msg);
   };
 
@@ -42,6 +46,15 @@ export function AIChatPanel({ messages, isLoading, onSendMessage, compact = fals
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadedFileName(file.name);
+    const mentionMsg = `[Ảnh đính kèm tại Bước 3: ${file.name}]\n${input.trim() ? input : "Phân tích ảnh khu đất/bản vẽ này và góp ý bố trí CAD."}`;
+    setInput(mentionMsg);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   return (
@@ -162,6 +175,31 @@ export function AIChatPanel({ messages, isLoading, onSendMessage, compact = fals
       </div>
 
       <div className="p-3 border-t border-border/50 bg-white/80">
+        {allowFileUpload && (
+          <div className="mb-2 flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,.pdf,.svg"
+              className="hidden"
+              onChange={handleFileChange}
+              data-testid="input-file-upload-chat"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1.5 text-xs text-primary/70 hover:text-primary border border-dashed border-primary/30 hover:border-primary/60 rounded-lg px-3 py-1.5 transition-colors"
+              data-testid="button-attach-file-chat"
+              title="Chỉ dùng được tại Bước 3 — Đính kèm ảnh khu đất hoặc bản vẽ tham khảo"
+            >
+              <Paperclip className="w-3.5 h-3.5" />
+              {uploadedFileName ? (
+                <span className="truncate max-w-[160px] text-primary font-medium">{uploadedFileName}</span>
+              ) : (
+                <span>Đính kèm ảnh / bản vẽ (Bước 3)</span>
+              )}
+            </button>
+          </div>
+        )}
         <div className="flex gap-2">
           <textarea
             ref={inputRef}

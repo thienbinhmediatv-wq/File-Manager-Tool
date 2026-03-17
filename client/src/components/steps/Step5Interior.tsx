@@ -21,6 +21,8 @@ const LIGHTING_STYLES = ["Ấm áp (Warm)", "Trung tính (Neutral)", "Mát (Cool
 interface Props {
   project: Project;
   stepStatus: string;
+  stepNumber?: number;
+  projectId?: number;
   onProcess: () => void;
   onApprove: () => void;
   onRedo: () => void;
@@ -30,7 +32,7 @@ interface Props {
   isApproving: boolean;
 }
 
-export function Step5Interior({ project, stepStatus, onProcess, onApprove, onRedo, onGoBack, backLabel, isProcessing, isApproving }: Props) {
+export function Step5Interior({ project, stepStatus, stepNumber, projectId, onProcess, onApprove, onRedo, onGoBack, backLabel, isProcessing, isApproving }: Props) {
   const [selectedMaterials, setSelectedMaterials] = useState<Record<string, boolean>>({});
   const [interiorStyle, setInteriorStyle] = useState(project.style);
   const [lighting, setLighting] = useState("Ấm áp (Warm)");
@@ -45,6 +47,8 @@ export function Step5Interior({ project, stepStatus, onProcess, onApprove, onRed
       title="Bước 5: Thiết kế nội thất"
       description="AI thiết kế nội thất chi tiết với vật liệu, đồ nội thất, ánh sáng."
       stepStatus={stepStatus}
+      stepNumber={stepNumber}
+      projectId={projectId}
       onProcess={onProcess}
       onApprove={onApprove}
       onRedo={onRedo}

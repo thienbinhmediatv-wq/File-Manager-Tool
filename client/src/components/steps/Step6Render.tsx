@@ -27,6 +27,8 @@ const VIDEO_MODELS = [
 interface Props {
   project: Project;
   stepStatus: string;
+  stepNumber?: number;
+  projectId?: number;
   onProcess: () => void;
   onApprove: () => void;
   onRedo: () => void;
@@ -36,7 +38,7 @@ interface Props {
   isApproving: boolean;
 }
 
-export function Step6Render({ project, stepStatus, onProcess, onApprove, onRedo, onGoBack, backLabel, isProcessing, isApproving }: Props) {
+export function Step6Render({ project, stepStatus, stepNumber, projectId, onProcess, onApprove, onRedo, onGoBack, backLabel, isProcessing, isApproving }: Props) {
   const [selectedAngles, setSelectedAngles] = useState<Record<string, boolean>>({ facade: true, living: true, bedroom: true });
   const [videoJobs, setVideoJobs] = useState<Record<string, { jobId: string; status: string; output?: string }>>({});
   const [generatingVideo, setGeneratingVideo] = useState<string | null>(null);
@@ -96,6 +98,8 @@ export function Step6Render({ project, stepStatus, onProcess, onApprove, onRedo,
       title="Bước 6: Render phối cảnh"
       description="AI tạo hình ảnh render phối cảnh và video flythrough."
       stepStatus={stepStatus}
+      stepNumber={stepNumber}
+      projectId={projectId}
       onProcess={onProcess}
       onApprove={onApprove}
       onRedo={onRedo}

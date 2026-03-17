@@ -17,6 +17,8 @@ const COLORS = [
 interface Props {
   project: Project;
   stepStatus: string;
+  stepNumber?: number;
+  projectId?: number;
   onProcess: () => void;
   onApprove: () => void;
   onRedo: () => void;
@@ -27,7 +29,7 @@ interface Props {
   isApproving: boolean;
 }
 
-export function Step4Model3D({ project, stepStatus, onProcess, onApprove, onRedo, onGoBack, backLabel, onSubmit, isProcessing, isApproving }: Props) {
+export function Step4Model3D({ project, stepStatus, stepNumber, projectId, onProcess, onApprove, onRedo, onGoBack, backLabel, onSubmit, isProcessing, isApproving }: Props) {
   const [facadeStyle, setFacadeStyle] = useState(project.facadeStyle || project.style);
   const [colorScheme, setColorScheme] = useState("white-gray");
   const result = project.model3dResult as { facadeImages?: string[]; designDescription?: string; facadeStyle?: string } | null;
@@ -42,6 +44,8 @@ export function Step4Model3D({ project, stepStatus, onProcess, onApprove, onRedo
       title="Bước 4: Mô hình 3D & Mặt tiền"
       description="AI tạo hình ảnh mặt tiền dựa trên phong cách bạn chọn."
       stepStatus={stepStatus}
+      stepNumber={stepNumber}
+      projectId={projectId}
       onProcess={handleProcess}
       onApprove={onApprove}
       onRedo={onRedo}

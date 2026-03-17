@@ -14,6 +14,7 @@ import { getDriveKnowledge, listDriveFiles, clearDriveCache, processAllDriveFile
 import { generateGeometry, LayoutValidationError } from "./geometry/geometryEngine.js";
 import type { GeometryResult } from "./geometry/geometryEngine.js";
 import { generateCADSVG, generateValidationErrorSVG } from "./cad/cadGenerator.js";
+import { renderWithControlNet } from "./replicateService.js";
 
 function buildBuildingDNA(geometryResult: GeometryResult, project: { floors: number; style: string; landWidth: number; landLength: number }): string {
   const floorDescriptions: string[] = [];
@@ -314,6 +315,27 @@ async function resolveReferenceToBuffer(reference: string): Promise<Buffer> {
   if (!res.ok) throw new Error(`Failed to fetch reference image: ${res.status}`);
   const arrayBuffer = await res.arrayBuffer();
   return Buffer.from(arrayBuffer);
+}
+
+async function aiGenerateImageWithReplicateFallback(
+  svgUrl: string | null,
+  prompt: string,
+  projectId: number,
+  name: string,
+  referenceImage?: string
+): Promise<string> {
+  if (svgUrl) {
+    try {
+      const replicateResult = await renderWithControlNet(svgUrl, prompt, projectId, name);
+      if (replicateResult) {
+        console.log(`[Replicate] ControlNet render succeeded for "${name}"`);
+        return replicateResult;
+      }
+    } catch (e) {
+      console.warn(`[Replicate] ControlNet failed for "${name}", falling back to OpenAI:`, e);
+    }
+  }
+  return aiGenerateImage(prompt, projectId, name, referenceImage);
 }
 
 async function aiGenerateImage(prompt: string, projectId: number, name: string, referenceImage?: string): Promise<string> {
@@ -823,10 +845,33 @@ Trả lời chi tiết, đủ dữ liệu để vẽ CAD thực tế.` }
           console.log(`Step 3: Bỏ qua AI illustration vì layout validation thất bại.`);
         }
 
+        const formattedValidationErrors = layoutValidationWarnings.map(warning => {
+          let type = "Lỗi không xác định";
+          let consequence = "Bản vẽ có thể không chính xác.";
+          if (/vượt.*chiều rộng|chiều rộng.*vượt|rộng.*vượt/i.test(warning)) {
+            type = "Tường vượt đất";
+            consequence = "Phòng sẽ bị cắt bỏ hoặc vị trí bị sai. Bản vẽ CAD sẽ không đúng tỷ lệ.";
+          } else if (/phi logic|không hợp lệ|không khả thi/i.test(warning)) {
+            type = "Phòng phi logic";
+            consequence = "Bố trí phòng không phù hợp với diện tích đất. Cần điều chỉnh kích thước.";
+          } else if (/ngân sách|chi phí|budget/i.test(warning)) {
+            type = "Ngân sách không khớp";
+            consequence = "Chi phí thực tế có thể vượt ngân sách đề xuất.";
+          } else if (/tổng.*phòng|phòng.*tổng|diện tích.*vượt|vượt.*85%/i.test(warning)) {
+            type = "Tổng phòng vượt đất";
+            consequence = "Tổng diện tích các phòng vượt quá 85% diện tích đất cho phép. Cần giảm kích thước phòng.";
+          } else if (/hàng.*vượt|dòng.*vượt/i.test(warning)) {
+            type = "Tường vượt đất (hàng phòng)";
+            consequence = "Một hàng phòng có tổng chiều rộng vượt quá chiều rộng khu đất. Sẽ bị cắt bỏ.";
+          }
+          return { type, detail: warning, consequence };
+        });
+
         result = {
           cadDrawings,
           svgFloorplans,
           layoutValidationWarnings,
+          formattedValidationErrors,
           cadDescription: cadText,
           dimensions: {
             totalArea: area * project.floors,
@@ -850,20 +895,28 @@ Trả lời chi tiết, đủ dữ liệu để vẽ CAD thực tế.` }
           dnaAnchor = `FIXED BUILDING STRUCTURE — do not alter between renders: ${dna}. ONLY change: `;
         }
 
-        const basePrompt4 = `${dnaAnchor ? dnaAnchor + "daytime lighting and blue sky. " : ""}Exterior facade of a beautiful ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture style, ${project.landWidth}m wide frontage, daytime with blue sky, professional architectural visualization, photorealistic, lush tropical landscaping, clean design`;
-        const baseImage4 = await aiGenerateImage(basePrompt4, id, "facade_day");
+        const svgFloorplans4 = (project.cadResult as any)?.svgFloorplans as Array<{ floor: number; svgUrl: string }> | undefined;
+        const cadSvgUrl4 = svgFloorplans4?.[0]?.svgUrl || null;
 
-        const facadeVariants = [
-          { name: "facade_night", prompt: `Same exact building architecture and design as the reference image. ${dnaAnchor ? dnaAnchor + "nighttime lighting with warm interior glow. " : ""}Exterior facade of a beautiful ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture style, ${project.landWidth}m wide, night time with warm interior lighting glowing through windows, professional architectural visualization, photorealistic, ambient outdoor lighting` },
-          { name: "facade_angle45", prompt: `Same exact building architecture and design as the reference image. ${dnaAnchor ? dnaAnchor + "45-degree camera angle, daytime. " : ""}45-degree angle view of a ${project.floors}-story Vietnamese residential house, ${facadeStyle} style, showing side wall and front facade, ${project.landWidth}m x ${project.landLength}m lot, daytime, lush garden, professional 3D render, photorealistic` },
-          { name: "facade_aerial", prompt: `Same exact building architecture and design as the reference image. ${dnaAnchor ? dnaAnchor + "aerial bird's eye camera angle. " : ""}Aerial bird's eye view of a ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture, showing rooftop and surrounding landscape, ${project.landWidth}m x ${project.landLength}m lot, professional architectural visualization, photorealistic, urban context` },
+        const basePrompt4 = `${dnaAnchor ? dnaAnchor + "daytime lighting and blue sky. " : ""}Exterior facade of a beautiful ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture style, ${project.landWidth}m wide frontage, daytime with blue sky, professional architectural visualization, photorealistic, lush tropical landscaping, clean design`;
+
+        const facadeVariantPrompts = [
+          { name: "facade_night", prompt: `${dnaAnchor ? dnaAnchor + "nighttime lighting with warm interior glow. " : ""}Exterior facade of a beautiful ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture style, ${project.landWidth}m wide, night time with warm interior lighting glowing through windows, professional architectural visualization, photorealistic, ambient outdoor lighting` },
+          { name: "facade_angle45", prompt: `${dnaAnchor ? dnaAnchor + "45-degree camera angle, daytime. " : ""}45-degree angle view of a ${project.floors}-story Vietnamese residential house, ${facadeStyle} style, showing side wall and front facade, ${project.landWidth}m x ${project.landLength}m lot, daytime, lush garden, professional 3D render, photorealistic` },
+          { name: "facade_aerial", prompt: `${dnaAnchor ? dnaAnchor + "aerial bird's eye camera angle. " : ""}Aerial bird's eye view of a ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture, showing rooftop and surrounding landscape, ${project.landWidth}m x ${project.landLength}m lot, professional architectural visualization, photorealistic, urban context` },
         ];
 
-        const facadeImages: string[] = [baseImage4];
-        for (const fp of facadeVariants) {
-          const url = await aiGenerateImage(fp.prompt, id, fp.name, baseImage4);
-          facadeImages.push(url);
-        }
+        const [baseImage4, ...variantResults] = await Promise.all([
+          aiGenerateImageWithReplicateFallback(cadSvgUrl4, basePrompt4, id, "facade_day"),
+          ...facadeVariantPrompts.map(fp =>
+            aiGenerateImageWithReplicateFallback(cadSvgUrl4, fp.prompt, id, fp.name).catch(e => {
+              console.error(`Step 4 parallel render error for ${fp.name}:`, e);
+              return "";
+            })
+          ),
+        ]);
+
+        const facadeImages: string[] = [baseImage4, ...variantResults.filter(Boolean)];
 
         const designText = await aiChat([
           { role: "system", content: `Bạn là kiến trúc sư AI của BMT Decor. Áp dụng Cẩm nang Tư duy Bước 4:
@@ -971,11 +1024,17 @@ Trả lời chi tiết, có con số thực tế.` }
           { name: "Ban công / Sân thượng", key: "interior_balcony", prompt: `Beautiful ${project.style} Vietnamese house balcony terrace, tropical plants local species, outdoor lounge, warm evening lighting ambient, city view context 80% similar real surroundings, life-like atmosphere, 4K architectural photography` },
         ];
 
-        const interiorImages: Array<{name: string; url: string}> = [];
-        for (const ip of interiorPrompts) {
-          const url = await aiGenerateImage(ip.prompt, id, ip.key);
-          interiorImages.push({ name: ip.name, url });
-        }
+        const interiorImages: Array<{name: string; url: string}> = await Promise.all(
+          interiorPrompts.map(async (ip) => {
+            try {
+              const url = await aiGenerateImage(ip.prompt, id, ip.key);
+              return { name: ip.name, url };
+            } catch (e) {
+              console.error(`Step 5 parallel interior image error for ${ip.name}:`, e);
+              return { name: ip.name, url: "" };
+            }
+          })
+        );
 
         result = {
           interiorDescription: interiorText,
@@ -996,29 +1055,44 @@ Trả lời chi tiết, có con số thực tế.` }
           dnaAnchor6 = `FIXED BUILDING STRUCTURE — do not alter between renders: ${dna}. ONLY change: `;
         }
 
-        const basePrompt6 = `${dnaAnchor6 ? dnaAnchor6 + "daytime lighting, materials, and landscaping. " : ""}Hyper-photorealistic exterior render ${project.floors}-story ${project.style} Vietnamese house, ${project.landWidth}m wide x ${project.landLength}m deep, ${lightingDir}, ${matDescriptor}, surrounding context: neighbor houses both sides, tropical trees, power poles on street matching 80% real site, professional architectural visualization, 8K, no noise`;
-        const baseImage6 = await aiGenerateImage(basePrompt6, id, "render_Mặt_tiền_ban_ngày");
+        const svgFloorplans6 = (project.cadResult as any)?.svgFloorplans as Array<{ floor: number; svgUrl: string }> | undefined;
+        const cadSvgUrl6 = svgFloorplans6?.[0]?.svgUrl || null;
 
-        const exteriorVariants6 = [
-          { name: "Mặt tiền ban đêm", prompt: `Same exact building architecture and design as the reference image. ${dnaAnchor6 ? dnaAnchor6 + "nighttime lighting and atmosphere. " : ""}Hyper-photorealistic exterior night render ${project.floors}-story ${project.style} Vietnamese house, ${project.landWidth}m wide, warm glow from interior through windows, IES spot lights uplighting facade, landscape LED ground lights, dramatic night sky, ${matDescriptor}, 8K quality no noise` },
-          { name: "Góc 45 độ ban ngày", prompt: `Same exact building architecture and design as the reference image. ${dnaAnchor6 ? dnaAnchor6 + "45-degree camera angle, daytime. " : ""}Photorealistic 45-degree angle exterior view ${project.floors}-story ${project.style} Vietnamese house ${project.landWidth}m x ${project.landLength}m, showing side and front facade, ${lightingDir}, tropical landscaping local species, ${matDescriptor}, eye-level 1.6m camera height, professional architectural visualization 8K` },
+        const exteriorPrompts6 = [
+          { name: "Mặt tiền ban ngày", prompt: `${dnaAnchor6 ? dnaAnchor6 + "daytime lighting, materials, and landscaping. " : ""}Hyper-photorealistic exterior render ${project.floors}-story ${project.style} Vietnamese house, ${project.landWidth}m wide x ${project.landLength}m deep, ${lightingDir}, ${matDescriptor}, surrounding context: neighbor houses both sides, tropical trees, power poles on street matching 80% real site, professional architectural visualization, 8K, no noise` },
+          { name: "Mặt tiền ban đêm", prompt: `${dnaAnchor6 ? dnaAnchor6 + "nighttime lighting and atmosphere. " : ""}Hyper-photorealistic exterior night render ${project.floors}-story ${project.style} Vietnamese house, ${project.landWidth}m wide, warm glow from interior through windows, IES spot lights uplighting facade, landscape LED ground lights, dramatic night sky, ${matDescriptor}, 8K quality no noise` },
+          { name: "Góc 45 độ ban ngày", prompt: `${dnaAnchor6 ? dnaAnchor6 + "45-degree camera angle, daytime. " : ""}Photorealistic 45-degree angle exterior view ${project.floors}-story ${project.style} Vietnamese house ${project.landWidth}m x ${project.landLength}m, showing side and front facade, ${lightingDir}, tropical landscaping local species, ${matDescriptor}, eye-level 1.6m camera height, professional architectural visualization 8K` },
+          { name: "Góc nhìn chim bay", prompt: `${dnaAnchor6 ? dnaAnchor6 + "aerial bird's eye camera angle, daytime. " : ""}Aerial bird's eye view ${project.floors}-story ${project.style} Vietnamese house, rooftop and surrounding landscape visible, ${project.landWidth}m x ${project.landLength}m, ${matDescriptor}, professional architectural visualization 8K` },
         ];
-
-        const renders = [{ name: "Mặt tiền ban ngày", url: baseImage6, angle: "Mặt tiền ban ngày" }];
-        for (const r of exteriorVariants6) {
-          const url = await aiGenerateImage(r.prompt, id, `render_${r.name.replace(/\s/g, "_")}`, baseImage6);
-          renders.push({ name: r.name, url, angle: r.name });
-        }
 
         const interiorPrompts6 = [
           { name: "Phòng khách", prompt: `Hyper-photorealistic interior render ${project.style} Vietnamese living room, ${matDescriptor}, eye-level camera 1.6m, 3-layer lighting (ambient ceiling recessed, task lamps, accent LED strip khe trần), 600mm clearance between furniture, life-like: books vase flowers tropical plant in corner, warm inviting atmosphere, 8K no noise no color shift` },
           { name: "Phòng ngủ Master", prompt: `Photorealistic ${project.style} master bedroom Vietnamese house, ${matDescriptor}, bed headboard against solid wall (feng shui), warm ambient 3-layer lighting, wide-angle no distortion on vertical walls, soft bedding textures, motion blur human silhouette for scale, 8K quality` },
           { name: "Phòng bếp & ăn", prompt: `Photorealistic Vietnamese ${project.style} kitchen dining, golden triangle layout stove-sink-fridge, ${matDescriptor}, pendant lights over dining, backsplash tiles detail, life-like: cookbook fruit bowl on counter, ${lightingDir} through window, 8K professional interior visualization` },
         ];
-        for (const r of interiorPrompts6) {
-          const url = await aiGenerateImage(r.prompt, id, `render_${r.name.replace(/\s/g, "_")}`);
-          renders.push({ name: r.name, url, angle: r.name });
-        }
+
+        const [exteriorResults, interiorResults] = await Promise.all([
+          Promise.all(exteriorPrompts6.map(async (ep) => {
+            try {
+              const url = await aiGenerateImageWithReplicateFallback(cadSvgUrl6, ep.prompt, id, `render_${ep.name.replace(/\s/g, "_")}`);
+              return { name: ep.name, url, angle: ep.name };
+            } catch (e) {
+              console.error(`Step 6 exterior render error for ${ep.name}:`, e);
+              return { name: ep.name, url: "", angle: ep.name };
+            }
+          })),
+          Promise.all(interiorPrompts6.map(async (ip) => {
+            try {
+              const url = await aiGenerateImage(ip.prompt, id, `render_${ip.name.replace(/\s/g, "_")}`);
+              return { name: ip.name, url, angle: ip.name };
+            } catch (e) {
+              console.error(`Step 6 interior render error for ${ip.name}:`, e);
+              return { name: ip.name, url: "", angle: ip.name };
+            }
+          })),
+        ]);
+
+        const renders = [...exteriorResults, ...interiorResults].filter(r => r.url);
 
         result = { renders };
 
@@ -1296,153 +1370,129 @@ Trả lời chi tiết, có con số thực tế.` }
             }
           }
 
-          // ===================== PAGE: TABLE OF CONTENTS =====================
-          doc.addPage();
-          doc.rect(0, 0, W, 55).fill(NAVY);
-          doc.fill("#ffffff").font(fnB).fontSize(20).text("MỤC LỤC", M, 16, { width: CW, align: "center" });
-          doc.fill("#000000");
-          doc.font(fnR).fontSize(12).text("", M, 80);
-          const tocItems = [
-            { num: "01", title: "PHÂN TÍCH HIỆN TRẠNG", sub: "Đánh giá khu đất, phong thủy, quy hoạch" },
-            { num: "02", title: "BỐ TRÍ MẶT BẰNG", sub: "Layout các tầng, phân chia phòng chức năng" },
-            { num: "03", title: "BẢN VẼ KỸ THUẬT", sub: "Bản vẽ CAD, kết cấu, hệ thống kỹ thuật" },
-            { num: "04", title: "THIẾT KẾ MẶT TIỀN", sub: "Kiến trúc ngoại thất, vật liệu, phối cảnh" },
-            { num: "05", title: "THIẾT KẾ NỘI THẤT", sub: "Nội thất từng phòng, vật liệu, màu sắc" },
-            { num: "06", title: "RENDER PHỐI CẢNH", sub: "Hình ảnh 3D photorealistic chất lượng cao" },
-            { num: "07", title: "DỰ TOÁN CHI PHÍ", sub: "Chi phí xây dựng, nội thất, tổng dự toán" },
-          ];
-          for (const item of tocItems) {
-            doc.moveDown(0.8);
-            doc.font(fnB).fontSize(18).fill(ACCENT).text(item.num, M, doc.y, { continued: true });
-            doc.fill(DARK).fontSize(14).text(`   ${item.title}`);
-            doc.font(fnR).fontSize(10).fill("#718096").text(`      ${item.sub}`);
-            doc.fill("#000000");
-            doc.moveDown(0.3);
-            doc.rect(M, doc.y, CW, 0.5).fill("#e2e8f0");
-          }
+          // ===================== SECTION 1: CAD SVG FLOOR PLANS =====================
+          // Title block helper for each drawing page
+          const drawTitleBlockOnPage = (sectionLabel: string, pageTitle: string, drawingCode: string, scale = "1/100") => {
+            const tbX = W - 155;
+            const tbY = 30;
+            const tbW = 125;
+            const tbH = H - 60;
+            doc.save();
+            doc.rect(tbX, tbY, tbW, tbH).stroke(NAVY);
+            doc.rect(tbX, tbY, tbW, 60).fill(NAVY);
+            doc.fill("#ffffff").font(fnB).fontSize(10).text("BMT DECOR", tbX + 5, tbY + 5, { width: tbW - 10, align: "center" });
+            doc.font(fnR).fontSize(7).text("CÔNG TY TNHH TMDV BMT DECOR", tbX + 5, tbY + 18, { width: tbW - 10, align: "center" });
+            doc.fontSize(7).text("7/92 Thành Thái, P.14, Q.10, TP.HCM", tbX + 5, tbY + 28, { width: tbW - 10, align: "center" });
+            doc.fill("#ffffff");
+            let tbRow = tbY + 65;
+            const tbField = (label: string, value: string) => {
+              doc.rect(tbX, tbRow, tbW, 1).fill(ACCENT);
+              doc.fill(DARK).font(fnB).fontSize(7).text(label, tbX + 5, tbRow + 3, { width: tbW - 10 });
+              doc.fill("#000000").font(fnR).fontSize(8).text(value, tbX + 5, tbRow + 12, { width: tbW - 10 });
+              tbRow += 28;
+            };
+            tbField("TÊN DỰ ÁN", project.title.substring(0, 30));
+            tbField("KHÁCH HÀNG", project.clientName || "N/A");
+            tbField("BẢN VẼ", sectionLabel);
+            tbField("MÔ TẢ", pageTitle.substring(0, 30));
+            tbField("MÃ BẢN VẼ", drawingCode);
+            tbField("TỶ LỆ", scale);
+            tbField("NGÀY", new Date().toLocaleDateString("vi-VN"));
+            tbField("DIRECTOR", "VÕ QUỐC BẢO");
+            doc.restore();
+          };
 
-          // ===================== SECTION 1: ANALYSIS =====================
-          sectionDivider(1, "PHÂN TÍCH HIỆN TRẠNG", "Đánh giá khu đất & yêu cầu thiết kế");
-          sectionContent("1. PHÂN TÍCH HIỆN TRẠNG");
-          doc.font(fnB).fontSize(12).fill(DARK).text("THÔNG TIN DỰ ÁN");
-          doc.moveDown(0.5);
-          doc.font(fnR).fontSize(10).fill("#000000");
-          const projectDetails = [
-            ["Tên dự án", project.title],
-            ["Khách hàng", project.clientName || "N/A"],
-            ["Kích thước đất", `${project.landWidth}m × ${project.landLength}m = ${area.toFixed(2)} m²`],
-            ["Số tầng", `${project.floors} tầng`],
-            ["Phòng ngủ", `${project.bedrooms} phòng`],
-            ["Phong cách thiết kế", project.style],
-            ["Ngân sách dự kiến", `${project.budget} triệu VNĐ`],
-          ];
-          for (let pi = 0; pi < projectDetails.length; pi++) {
-            const [label, value] = projectDetails[pi];
-            const y = doc.y;
-            doc.rect(M, y, CW, 22).fill(pi % 2 === 0 ? "#f7fafc" : "#ffffff");
-            doc.fill("#000000").font(fnB).fontSize(10).text(label, M + 10, y + 5, { width: 200 });
-            doc.font(fnR).text(String(value), M + 220, y + 5, { width: CW - 230 });
-          }
-          doc.moveDown(1.5);
-          if (analysis?.aiAnalysis) {
-            doc.font(fnB).fontSize(12).fill(DARK).text("PHÂN TÍCH AI");
-            doc.moveDown(0.5);
-            doc.font(fnR).fontSize(9.5).fill("#000000").text(sanitizeClientName(String(analysis.aiAnalysis), project.clientName || "").substring(0, 4000));
-          } else if (analysis) {
-            doc.font(fnR).fontSize(9.5).text(JSON.stringify(analysis, null, 2).substring(0, 3000));
-          }
+          const addTitleBlockPage = (imgUrl: string, sectionLabel: string, pageTitle: string, drawingCode: string) => {
+            const imgPath = resolveImage(imgUrl);
+            if (!imgPath) { console.warn(`PDF: Missing image for "${pageTitle}"`); return; }
+            try {
+              doc.addPage();
+              const contentW = W - 155 - M - 10;
+              doc.image(imgPath, M, 30, { fit: [contentW, H - 80], align: "center", valign: "center" });
+              drawTitleBlockOnPage(sectionLabel, pageTitle, drawingCode);
+              embeddedImageCount++;
+            } catch (e) { console.error("PDF title block page error:", e); }
+          };
 
-          // ===================== SECTION 2: LAYOUT =====================
-          sectionDivider(2, "BỐ TRÍ MẶT BẰNG", "Layout các tầng & phân chia chức năng");
-          sectionContent("2. BỐ TRÍ MẶT BẰNG");
-          if (layout?.floors) {
-            for (const fl of layout.floors) {
-              doc.font(fnB).fontSize(13).fill(ACCENT).text(`TẦNG ${fl.floor}`);
-              doc.moveDown(0.3);
-              doc.rect(M, doc.y, CW, 1).fill(ACCENT);
-              doc.moveDown(0.4);
-              let totalFloorArea = 0;
-              for (const room of fl.rooms) {
-                const roomArea = room.w * room.h;
-                totalFloorArea += roomArea;
-                const y = doc.y;
-                doc.rect(M, y, CW, 20).fill("#f7fafc");
-                doc.fill("#000000").font(fnR).fontSize(10);
-                doc.text(`• ${sanitizeClientName(room.name, project.clientName || "")}`, M + 10, y + 4, { width: 200 });
-                doc.text(`${room.w}m × ${room.h}m`, M + 220, y + 4, { width: 100 });
-                doc.font(fnB).text(`${roomArea.toFixed(1)} m²`, M + 340, y + 4, { width: 80 });
-                doc.y = y + 22;
-              }
-              doc.moveDown(0.3);
-              doc.font(fnB).fontSize(10).fill(GREEN_TXT).text(`Tổng diện tích tầng ${fl.floor}: ${totalFloorArea.toFixed(1)} m²`);
-              doc.fill("#000000");
-              doc.moveDown(1);
-              if (doc.y > H - 150) { sectionContent("2. BỐ TRÍ MẶT BẰNG (tiếp)"); }
+          const addFullPageImageBMT = (imgUrl: string, sectionLabel: string, caption: string, drawingCode: string) => {
+            const imgPath = resolveImage(imgUrl);
+            if (!imgPath) { console.warn(`PDF: Missing image for "${caption}"`); return; }
+            try {
+              doc.addPage();
+              doc.image(imgPath, 0, 0, { width: W - 155, height: H - 70 });
+              doc.save();
+              doc.opacity(0.88);
+              doc.rect(0, H - 70, W - 155, 70).fill(NAVY);
+              doc.opacity(1);
+              doc.restore();
+              doc.fill("#ffffff").font(fnB).fontSize(13).text(caption, M, H - 55, { width: W - 155 - M, align: "center" });
+              doc.font(fnR).fontSize(9).text(project.title, M, H - 35, { width: W - 155 - M, align: "center" });
+              drawTitleBlockOnPage(sectionLabel, caption, drawingCode);
+              embeddedImageCount++;
+            } catch (e) { console.error("PDF full-page BMT image error:", e); }
+          };
+
+          // CAD SVG floor plans
+          if (cad?.svgFloorplans?.length) {
+            for (let fi = 0; fi < cad.svgFloorplans.length; fi++) {
+              const fp = cad.svgFloorplans[fi];
+              addTitleBlockPage(fp.svgUrl, `CAD-${fi + 1}`, fp.floorLabel || `MẶT BẰNG TẦNG ${fp.floor}`, `${pdfCodeName}-CAD${fi + 1}`);
             }
-          } else if (layout) {
-            doc.font(fnR).fontSize(10).text(JSON.stringify(layout, null, 2).substring(0, 3000));
-          }
-
-          // ===================== SECTION 3: CAD =====================
-          sectionDivider(3, "BẢN VẼ KỸ THUẬT", "Bản vẽ CAD & thông số kỹ thuật");
-          sectionContent("3. BẢN VẼ KỸ THUẬT");
-          if (cad?.cadDescription) {
-            doc.font(fnR).fontSize(9.5).text(sanitizeClientName(cad.cadDescription, project.clientName || "").substring(0, 4000));
-          }
-          if (cad?.cadDrawings) {
-            for (const drawing of cad.cadDrawings) {
+          } else if (cad?.cadDrawings?.length) {
+            for (let fi = 0; fi < cad.cadDrawings.length; fi++) {
+              const drawing = cad.cadDrawings[fi];
               if (drawing.imageUrl) {
-                addImageWithCaption(drawing.imageUrl, drawing.name || "Bản vẽ kỹ thuật");
+                addTitleBlockPage(drawing.imageUrl, `CAD-${fi + 1}`, drawing.name || `BẢN VẼ KỸ THUẬT ${fi + 1}`, `${pdfCodeName}-CAD${fi + 1}`);
               }
             }
           }
 
-          // ===================== SECTION 4: FACADE =====================
-          sectionDivider(4, "THIẾT KẾ MẶT TIỀN", "Kiến trúc ngoại thất & phối cảnh");
-          sectionContent("4. THIẾT KẾ MẶT TIỀN");
-          if (model3d?.designDescription) {
-            doc.font(fnR).fontSize(9.5).text(sanitizeClientName(model3d.designDescription, project.clientName || "").substring(0, 4000));
-          }
-          const facadeLabels = ["Mặt tiền ban ngày", "Mặt tiền ban đêm", "Góc nhìn 45°", "Phối cảnh tổng thể"];
-          if (model3d?.facadeImages) {
+          // ===================== SECTION 2: 3D FACADE 4 ANGLES =====================
+          const facadeLabels = ["Mặt tiền ban ngày", "Mặt tiền ban đêm", "Góc nhìn 45°", "Góc nhìn chim bay"];
+          if (model3d?.facadeImages?.length) {
             for (let i = 0; i < model3d.facadeImages.length; i++) {
               const label = facadeLabels[i] || `Phối cảnh mặt tiền ${i + 1}`;
-              addFullPageImage(model3d.facadeImages[i], label);
+              addFullPageImageBMT(model3d.facadeImages[i], `MT-${i + 1}`, label, `${pdfCodeName}-MT${i + 1}`);
             }
           }
 
-          // ===================== SECTION 5: INTERIOR =====================
-          sectionDivider(5, "THIẾT KẾ NỘI THẤT", "Nội thất từng phòng & vật liệu hoàn thiện");
-          sectionContent("5. THIẾT KẾ NỘI THẤT");
-          if (interior?.interiorDescription) {
-            doc.font(fnR).fontSize(9.5).text(sanitizeClientName(interior.interiorDescription, project.clientName || "").substring(0, 4000));
-          }
-          if (interior?.interiorImages) {
-            for (const img of interior.interiorImages) {
-              addFullPageImage(img.url, img.name || "Thiết kế nội thất");
+          // ===================== SECTION 3: INTERIOR ROOMS =====================
+          if (interior?.interiorImages?.length) {
+            for (let i = 0; i < interior.interiorImages.length; i++) {
+              const img = interior.interiorImages[i];
+              if (img.url) {
+                addFullPageImageBMT(img.url, `NT-${i + 1}`, img.name || `Thiết kế nội thất ${i + 1}`, `${pdfCodeName}-NT${i + 1}`);
+              }
             }
           }
 
-          // ===================== SECTION 6: RENDERS =====================
-          sectionDivider(6, "RENDER PHỐI CẢNH", "Hình ảnh 3D photorealistic chất lượng cao");
-          if (renderResult?.renders) {
-            for (const r of renderResult.renders) {
-              addFullPageImage(r.url, r.name);
+          // ===================== SECTION 4: RENDER 4K =====================
+          if (renderResult?.renders?.length) {
+            for (let i = 0; i < renderResult.renders.length; i++) {
+              const r = renderResult.renders[i];
+              if (r.url) {
+                addFullPageImageBMT(r.url, `PC-${i + 1}`, r.name || `Phối cảnh ${i + 1}`, `${pdfCodeName}-PC${i + 1}`);
+              }
             }
           }
 
-          // ===================== SECTION 7: COST ESTIMATE =====================
-          sectionDivider(7, "DỰ TOÁN CHI PHÍ", "Chi phí xây dựng & nội thất dự kiến");
-          sectionContent("7. DỰ TOÁN CHI PHÍ");
+          // ===================== SECTION 5: COST ESTIMATE =====================
+          const costContentW = W - 155 - M - 10;
+          doc.addPage();
+          doc.rect(0, 0, W - 155, 55).fill(NAVY);
+          doc.fill("#ffffff").font(fnB).fontSize(20).text("DỰ TOÁN CHI PHÍ", M, 16, { width: costContentW, align: "center" });
+          doc.fill("#000000").font(fnR).fontSize(10).text("", M, 70);
+          drawTitleBlockOnPage("DT-1", "Bảng dự toán chi phí", `${pdfCodeName}-DT1`);
 
-          doc.font(fnB).fontSize(13).fill(DARK).text("BẢNG DỰ TOÁN CHI PHÍ");
+          doc.font(fnB).fontSize(13).fill(DARK).text("BẢNG DỰ TOÁN CHI PHÍ", M, doc.y);
           doc.moveDown(0.5);
 
           const tableTop = doc.y;
-          const colWidths = [30, 220, 100, 145];
+          const colWidths = [25, 180, 85, 110];
           const tableHeaders = ["STT", "Hạng mục", "Đơn vị", "Thành tiền (triệu VNĐ)"];
           let tx = M;
-          doc.rect(M, tableTop, CW, 28).fill(NAVY);
+          const costTableW = colWidths.reduce((a, b) => a + b, 0);
+          doc.rect(M, tableTop, costTableW, 28).fill(NAVY);
           for (let i = 0; i < tableHeaders.length; i++) {
             doc.fill("#ffffff").font(fnB).fontSize(9).text(tableHeaders[i], tx + 5, tableTop + 8, { width: colWidths[i] - 10 });
             tx += colWidths[i];
@@ -1461,7 +1511,7 @@ Trả lời chi tiết, có con số thực tế.` }
 
           for (let r = 0; r < costRows.length; r++) {
             const ry = doc.y;
-            doc.rect(M, ry, CW, 24).fill(r % 2 === 0 ? "#f7fafc" : "#ffffff");
+            doc.rect(M, ry, costTableW, 24).fill(r % 2 === 0 ? "#f7fafc" : "#ffffff");
             tx = M;
             for (let c = 0; c < costRows[r].length; c++) {
               doc.fill("#000000").font(c === 0 ? fnB : fnR).fontSize(9).text(costRows[r][c], tx + 5, ry + 6, { width: colWidths[c] - 10 });
@@ -1472,18 +1522,18 @@ Trả lời chi tiết, có con số thực tế.` }
 
           const grandTotal = totalCost + Math.round(totalArea * 1.5) + Math.round(totalArea * 0.8) + Math.round(area * 0.5) + Math.round(totalCost * 0.08);
           doc.moveDown(0.5);
-          doc.rect(M, doc.y, CW, 40).fill(GREEN_BG);
+          doc.rect(M, doc.y, costTableW, 40).fill(GREEN_BG);
           const gtY = doc.y;
-          doc.fill(GREEN_TXT).font(fnB).fontSize(14).text(`TỔNG DỰ TOÁN: ${grandTotal.toLocaleString("vi-VN")} triệu VNĐ`, M + 15, gtY + 12, { width: CW - 30, align: "center" });
+          doc.fill(GREEN_TXT).font(fnB).fontSize(14).text(`TỔNG DỰ TOÁN: ${grandTotal.toLocaleString("vi-VN")} triệu VNĐ`, M + 15, gtY + 12, { width: costTableW - 30, align: "center" });
           doc.y = gtY + 50;
           doc.fill("#000000");
 
           doc.moveDown(1);
           doc.font(fnR).fontSize(9).fill("#718096");
-          doc.text("Lưu ý:");
-          doc.text("• Đây là ước tính sơ bộ dựa trên đơn giá trung bình khu vực Tây Nguyên.");
-          doc.text("• Chi phí thực tế có thể thay đổi ±15% tùy theo vật liệu và nhà thầu thi công.");
-          doc.text("• Chưa bao gồm chi phí giấy phép xây dựng và thuế.");
+          doc.text("Lưu ý:", M);
+          doc.text("• Đây là ước tính sơ bộ dựa trên đơn giá trung bình khu vực Tây Nguyên.", M, doc.y, { width: costContentW });
+          doc.text("• Chi phí thực tế có thể thay đổi ±15% tùy theo vật liệu và nhà thầu thi công.", M, doc.y, { width: costContentW });
+          doc.text("• Chưa bao gồm chi phí giấy phép xây dựng và thuế.", M, doc.y, { width: costContentW });
           doc.fill("#000000");
 
           // ===================== FINAL PAGE: CONTACT & COMMITMENT =====================
@@ -1640,7 +1690,7 @@ Trả lời chi tiết, có con số thực tế.` }
       const interiorCost = Math.round(totalArea * 3.5);
       const totalCost = Math.round(totalArea * 10.5);
 
-      const cad = project.cadResult as { cadDescription?: string; cadDrawings?: Array<{imageUrl?: string; name?: string}> } | null;
+      const cad = project.cadResult as { cadDescription?: string; cadDrawings?: Array<{imageUrl?: string; name?: string}>; svgFloorplans?: Array<{floor: number; floorLabel: string; svgUrl: string}> } | null;
       const model3d = project.model3dResult as { facadeImages?: string[]; designDescription?: string } | null;
       const interior = project.interiorResult as { interiorDescription?: string; interiorImages?: Array<{url: string; name?: string}> } | null;
       const renderResult = project.renderResult as { renders?: Array<{name: string; url: string}> } | null;
@@ -2222,6 +2272,19 @@ Trả lời chi tiết, có con số thực tế.` }
         console.error("Failed to load AI settings/knowledge:", e);
       }
 
+      const currentStepNum = step || project?.currentStep || 1;
+      const isRestrictedStep = currentStepNum === 4 || currentStepNum === 5 || currentStepNum === 6;
+      const restrictedStepInstructions = isRestrictedStep
+        ? `\n\nGIỚI HẠN TƯ VẤN TẠI BƯỚC ${currentStepNum}:
+Bạn CHỈ được tư vấn về:
+- Layout bố trí (vị trí đồ vật, bố cục phòng)
+- Vật liệu hoàn thiện và màu sắc
+- Tông màu chủ đạo và phối màu
+- Ánh sáng (3 lớp: ambient, task, accent)
+KHÔNG được thay đổi hoặc tư vấn về: cấu trúc tường, kích thước phòng, hệ thống kết cấu, thay đổi layout cơ bản.
+Nếu khách yêu cầu thay đổi cấu trúc, hãy lịch sự giải thích rằng thay đổi cấu trúc cần quay lại Bước 3 và không thể thực hiện tại bước này.`
+        : "";
+
       const systemPrompt = `Bạn là AI chuyên gia thiết kế kiến trúc & nội thất của BMT DECOR (CÔNG TY TNHH TMDV BMT DECOR). Director: Võ Quốc Bảo. Địa chỉ: 7/92 Thành Thái, P.14, Q.10, TP.HCM. Website: thicongtramsac.vn.
 
 CHUYÊN MÔN:
@@ -2236,7 +2299,8 @@ QUY TRÌNH 7 BƯỚC BMT DECOR:
 Bước 1: Thu thập thông tin dự án | Bước 2: Phân tích hiện trạng & Layout | Bước 3: Bản vẽ CAD 2D chuẩn A/E | Bước 4: Mô hình 3D | Bước 5: Thiết kế nội thất | Bước 6: Render phối cảnh 4K | Bước 7: Xuất hồ sơ PDF chuẩn
 ${customInstructions}
 ${project ? `${buildProjectContext(project as unknown as Record<string, unknown>)}
-- Bước hiện tại: ${step || project.currentStep}/7 - ${STEP_NAMES[step || project.currentStep]}` : ""}
+- Bước hiện tại: ${currentStepNum}/7 - ${STEP_NAMES[currentStepNum]}` : ""}
+${restrictedStepInstructions}
 ${searchContext}
 ${knowledgeContext}
 

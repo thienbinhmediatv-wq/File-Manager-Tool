@@ -1,11 +1,16 @@
 import { useState, ReactNode } from "react";
-import { Check, RotateCcw, Loader2, Sparkles, Download, Maximize2, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Check, RotateCcw, Loader2, Sparkles, Download, Maximize2, X, ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+const REDO_LIMITED_STEPS = [4, 5, 6];
+const REDO_LIMIT = 1;
 
 interface StepWrapperProps {
   title: string;
   description: string;
   stepStatus: string;
+  stepNumber?: number;
+  projectId?: number;
   onProcess: () => void;
   onApprove: () => void;
   onRedo: () => void;
@@ -142,7 +147,7 @@ export function ImageGallery({ images }: ImageGalleryProps) {
 }
 
 export function StepWrapper({
-  title, description, stepStatus, onProcess, onApprove, onRedo, onGoBack, backLabel,
+  title, description, stepStatus, stepNumber, projectId, onProcess, onApprove, onRedo, onGoBack, backLabel,
   isProcessing, isApproving, children, resultContent, forceShowForm,
 }: StepWrapperProps) {
   const showResult = stepStatus === "completed" || stepStatus === "approved" || (stepStatus === "processing" && !!resultContent);
@@ -150,6 +155,23 @@ export function StepWrapper({
   const isCompleted = stepStatus === "completed";
   const isApproved = stepStatus === "approved";
   const isProcessingState = stepStatus === "processing";
+
+  const redoLimitKey = stepNumber && projectId ? `redo_${projectId}_step${stepNumber}` : null;
+  const isRedoLimited = stepNumber !== undefined && REDO_LIMITED_STEPS.includes(stepNumber);
+  const getRedoCount = () => {
+    if (!redoLimitKey) return 0;
+    return parseInt(localStorage.getItem(redoLimitKey) || "0", 10);
+  };
+  const redoCount = getRedoCount();
+  const redoExhausted = isRedoLimited && redoCount >= REDO_LIMIT;
+
+  const handleRedoWithLimit = () => {
+    if (redoExhausted) return;
+    if (redoLimitKey) {
+      localStorage.setItem(redoLimitKey, String(redoCount + 1));
+    }
+    onRedo();
+  };
 
   return (
     <div className="space-y-5 pb-20" data-testid="step-wrapper">
@@ -230,14 +252,27 @@ export function StepWrapper({
 
           {isCompleted && (
             <>
-              <Button
-                onClick={onRedo}
-                variant="outline"
-                className="rounded-xl px-5 min-h-[44px] text-sm dark:border-slate-600"
-                data-testid="button-redo"
-              >
-                <RotateCcw className="w-4 h-4 mr-1.5" /> Làm lại
-              </Button>
+              <div className="flex flex-col items-start">
+                <Button
+                  onClick={handleRedoWithLimit}
+                  disabled={redoExhausted}
+                  variant="outline"
+                  className="rounded-xl px-5 min-h-[44px] text-sm dark:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  data-testid="button-redo"
+                  title={redoExhausted ? `Đã dùng hết ${REDO_LIMIT} lần làm lại cho bước này` : undefined}
+                >
+                  {redoExhausted ? (
+                    <><Lock className="w-4 h-4 mr-1.5 text-red-500" /> Làm lại (đã dùng)</>
+                  ) : (
+                    <><RotateCcw className="w-4 h-4 mr-1.5" /> Làm lại {isRedoLimited ? `(còn ${REDO_LIMIT - redoCount}/${REDO_LIMIT})` : ""}</>
+                  )}
+                </Button>
+                {isRedoLimited && (
+                  <span className="text-[10px] text-muted-foreground mt-1 pl-1">
+                    {redoExhausted ? "Không thể làm lại thêm" : `Giới hạn ${REDO_LIMIT} lần/bước`}
+                  </span>
+                )}
+              </div>
               <Button
                 onClick={onApprove}
                 disabled={isApproving}

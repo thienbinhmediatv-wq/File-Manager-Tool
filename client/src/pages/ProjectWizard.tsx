@@ -144,6 +144,8 @@ export default function ProjectWizard() {
   const stepProps = (step: number) => ({
     project: project as Project,
     stepStatus: getStepStatus(step),
+    stepNumber: step,
+    projectId,
     onProcess: () => handleProcess(step),
     onApprove: () => handleApprove(step),
     onRedo: () => handleRedo(step),
@@ -242,6 +244,7 @@ export default function ProjectWizard() {
         isLoading={chatLoading}
         onSendMessage={(msg) => sendMessage(msg, currentStep)}
         unreadCount={unreadCount}
+        currentStep={currentStep}
         onOpen={markRead}
         onClose={markClosed}
       />
