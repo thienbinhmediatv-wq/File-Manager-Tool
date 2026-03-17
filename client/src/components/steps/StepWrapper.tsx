@@ -186,6 +186,11 @@ export function StepWrapper({
           <div className="rounded-2xl border border-border/50 bg-white/80 dark:bg-slate-800/80 p-5" data-testid="step-result">
             {resultContent}
           </div>
+          {isCompleted && (
+            <p className="text-xs text-muted-foreground text-center" data-testid="text-step-hint">
+              Không hài lòng? Chat với AI để chỉnh sửa, nhấn Duyệt khi OK.
+            </p>
+          )}
         </div>
       )}
 

@@ -429,6 +429,16 @@ function buildSearchQuery(message: string, project: any): string {
   return query;
 }
 
+function sanitizeClientName(text: string, clientName: string): string {
+  if (!text || !clientName) return text;
+  return text.replace(/\[Cập nhật[^\]]*\]/g, clientName)
+             .replace(/\[Tên KH[^\]]*\]/g, clientName)
+             .replace(/\[Chủ đầu tư[^\]]*\]/g, clientName)
+             .replace(/\[tên khách hàng[^\]]*\]/gi, clientName)
+             .replace(/\[tên chủ đầu tư[^\]]*\]/gi, clientName)
+             .replace(/\[KH[^\]]*\]/g, clientName);
+}
+
 function buildProjectContext(project: Record<string, unknown>): string {
   const arch = project.selectedArchitecture as { name: string } | null;
   return `Thông tin dự án:
@@ -591,24 +601,42 @@ export async function registerRoutes(
         result = { collected: true, area, dimensions: `${project.landWidth}m x ${project.landLength}m` };
 
       } else if (step === 2) {
+        const setback = project.landWidth <= 5 ? 1.2 : 1.4;
+        const uploadedFilesContext = (() => {
+          const files = project.uploadedFiles as Array<{ name: string; type: string; url: string }> | null;
+          if (!files || files.length === 0) return "";
+          const fileList = files.map(f => `- ${f.name} (${f.type}): ${f.url}`).join("\n");
+          return `\n\nTài liệu đã upload:\n${fileList}`;
+        })();
+
         const analysisText = await aiChat([
-          { role: "system", content: "Bạn là kiến trúc sư AI chuyên phân tích hiện trạng khu đất tại Việt Nam. Trả lời bằng tiếng Việt, chuyên nghiệp." },
+          { role: "system", content: "Bạn là kiến trúc sư AI chuyên phân tích hiện trạng khu đất tại Việt Nam. Trả lời bằng tiếng Việt, chuyên nghiệp. KHÔNG hỏi về Sổ đỏ, lộ giới, hay video khảo sát. Tự giả định hướng Nam khi không có thông tin hướng cụ thể." },
           { role: "user", content: `Phân tích hiện trạng khu đất và đề xuất layout phòng chi tiết cho dự án:
-${ctx}
+${ctx}${uploadedFilesContext}
+
+Thông tin kỹ thuật bắt buộc áp dụng:
+- Hướng mặc định: Nam (nếu không có thông tin khác)
+- Khoảng lùi: ${setback}m (chiều rộng ${project.landWidth}m ${project.landWidth <= 5 ? "≤5m" : ">5m"})
+- Mật độ xây dựng tối đa: 70%
 
 Hãy phân tích:
-1. Hướng nhà tối ưu (theo phong thủy VN)
+1. Hướng nhà tối ưu (theo phong thủy VN) — mặc định là Nam nếu không có thông tin
 2. Ánh sáng tự nhiên
 3. Thông gió
 4. Phong thủy sơ bộ
 5. Đề xuất bố trí layout phòng cho từng tầng (tên phòng, kích thước m x m)
 
-Trả lời chi tiết.` }
+KHÔNG hỏi thêm về Sổ đỏ, lộ giới, hay video khảo sát. Tự giả định và trả lời chi tiết ngay.` }
         ], 3000);
 
         const layoutText = await aiChat([
-          { role: "system", content: "Bạn là kiến trúc sư AI. Trả về JSON thuần túy, không markdown." },
-          { role: "user", content: `Tạo layout phòng chi tiết cho nhà ${project.landWidth}m x ${project.landLength}m, ${project.floors} tầng, ${project.bedrooms} phòng ngủ, phong cách ${project.style}.
+          { role: "system", content: "Bạn là kiến trúc sư AI. Trả về JSON thuần túy, không markdown. KHÔNG hỏi thêm thông tin." },
+          { role: "user", content: `Tạo layout phòng chi tiết cho nhà ${project.landWidth}m x ${project.landLength}m, ${project.floors} tầng, ${project.bedrooms} phòng ngủ, phong cách ${project.style}.${uploadedFilesContext}
+
+Áp dụng:
+- Hướng mặc định: Nam
+- Khoảng lùi: ${setback}m
+- Mật độ xây dựng: ≤70%
 
 Trả về JSON dạng:
 {"floors": [{"floor": 1, "rooms": [{"name": "Phòng khách", "w": 4, "h": 5}, ...]}, ...]}
@@ -1023,7 +1051,10 @@ Trả lời chi tiết, có con số thực tế.` }
 
         // --- TRY PDF GENERATOR API FIRST ---
         const layoutText = layout?.floors
-          ? layout.floors.map(fl => `Tầng ${fl.floor}: ` + fl.rooms.map(r => `${r.name} (${r.w}m × ${r.h}m = ${(r.w * r.h).toFixed(1)} m²)`).join(", ")).join("\n")
+          ? sanitizeClientName(
+              layout.floors.map(fl => `Tầng ${fl.floor}: ` + fl.rooms.map(r => `${r.name} (${r.w}m × ${r.h}m = ${(r.w * r.h).toFixed(1)} m²)`).join(", ")).join("\n"),
+              project.clientName || ""
+            )
           : "";
 
         const dateStr = new Date().toLocaleDateString("vi-VN").replace(/\//g, "-");
@@ -1060,11 +1091,11 @@ Trả lời chi tiết, có con số thực tế.` }
           scale: "1/100",
           drawing_code: pdfCodeName,
           date: new Date().toLocaleDateString("vi-VN"),
-          analysis_text: analysis?.aiAnalysis ? String(analysis.aiAnalysis).substring(0, 3500) : "Chưa có dữ liệu phân tích.",
+          analysis_text: analysis?.aiAnalysis ? sanitizeClientName(String(analysis.aiAnalysis), project.clientName || "").substring(0, 3500) : "Chưa có dữ liệu phân tích.",
           layout_text: layoutText || "Chưa có dữ liệu layout.",
-          cad_text: cad?.cadDescription ? cad.cadDescription.substring(0, 3500) : "Chưa có dữ liệu CAD.",
-          facade_text: model3d?.designDescription ? model3d.designDescription.substring(0, 3500) : "Chưa có mô tả mặt tiền.",
-          interior_text: interior?.interiorDescription ? interior.interiorDescription.substring(0, 3500) : "Chưa có mô tả nội thất.",
+          cad_text: cad?.cadDescription ? sanitizeClientName(cad.cadDescription, project.clientName || "").substring(0, 3500) : "Chưa có dữ liệu CAD.",
+          facade_text: model3d?.designDescription ? sanitizeClientName(model3d.designDescription, project.clientName || "").substring(0, 3500) : "Chưa có mô tả mặt tiền.",
+          interior_text: interior?.interiorDescription ? sanitizeClientName(interior.interiorDescription, project.clientName || "").substring(0, 3500) : "Chưa có mô tả nội thất.",
           qa_report: qaReport,
           total_area: `${totalArea} m²`,
           unit_price: "6 - 10 triệu VNĐ/m²",
@@ -1316,7 +1347,7 @@ Trả lời chi tiết, có con số thực tế.` }
           if (analysis?.aiAnalysis) {
             doc.font(fnB).fontSize(12).fill(DARK).text("PHÂN TÍCH AI");
             doc.moveDown(0.5);
-            doc.font(fnR).fontSize(9.5).fill("#000000").text(String(analysis.aiAnalysis).substring(0, 4000));
+            doc.font(fnR).fontSize(9.5).fill("#000000").text(sanitizeClientName(String(analysis.aiAnalysis), project.clientName || "").substring(0, 4000));
           } else if (analysis) {
             doc.font(fnR).fontSize(9.5).text(JSON.stringify(analysis, null, 2).substring(0, 3000));
           }
@@ -1337,7 +1368,7 @@ Trả lời chi tiết, có con số thực tế.` }
                 const y = doc.y;
                 doc.rect(M, y, CW, 20).fill("#f7fafc");
                 doc.fill("#000000").font(fnR).fontSize(10);
-                doc.text(`• ${room.name}`, M + 10, y + 4, { width: 200 });
+                doc.text(`• ${sanitizeClientName(room.name, project.clientName || "")}`, M + 10, y + 4, { width: 200 });
                 doc.text(`${room.w}m × ${room.h}m`, M + 220, y + 4, { width: 100 });
                 doc.font(fnB).text(`${roomArea.toFixed(1)} m²`, M + 340, y + 4, { width: 80 });
                 doc.y = y + 22;
@@ -1356,7 +1387,7 @@ Trả lời chi tiết, có con số thực tế.` }
           sectionDivider(3, "BẢN VẼ KỸ THUẬT", "Bản vẽ CAD & thông số kỹ thuật");
           sectionContent("3. BẢN VẼ KỸ THUẬT");
           if (cad?.cadDescription) {
-            doc.font(fnR).fontSize(9.5).text(cad.cadDescription.substring(0, 4000));
+            doc.font(fnR).fontSize(9.5).text(sanitizeClientName(cad.cadDescription, project.clientName || "").substring(0, 4000));
           }
           if (cad?.cadDrawings) {
             for (const drawing of cad.cadDrawings) {
@@ -1370,7 +1401,7 @@ Trả lời chi tiết, có con số thực tế.` }
           sectionDivider(4, "THIẾT KẾ MẶT TIỀN", "Kiến trúc ngoại thất & phối cảnh");
           sectionContent("4. THIẾT KẾ MẶT TIỀN");
           if (model3d?.designDescription) {
-            doc.font(fnR).fontSize(9.5).text(model3d.designDescription.substring(0, 4000));
+            doc.font(fnR).fontSize(9.5).text(sanitizeClientName(model3d.designDescription, project.clientName || "").substring(0, 4000));
           }
           const facadeLabels = ["Mặt tiền ban ngày", "Mặt tiền ban đêm", "Góc nhìn 45°", "Phối cảnh tổng thể"];
           if (model3d?.facadeImages) {
@@ -1384,7 +1415,7 @@ Trả lời chi tiết, có con số thực tế.` }
           sectionDivider(5, "THIẾT KẾ NỘI THẤT", "Nội thất từng phòng & vật liệu hoàn thiện");
           sectionContent("5. THIẾT KẾ NỘI THẤT");
           if (interior?.interiorDescription) {
-            doc.font(fnR).fontSize(9.5).text(interior.interiorDescription.substring(0, 4000));
+            doc.font(fnR).fontSize(9.5).text(sanitizeClientName(interior.interiorDescription, project.clientName || "").substring(0, 4000));
           }
           if (interior?.interiorImages) {
             for (const img of interior.interiorImages) {
@@ -1924,7 +1955,7 @@ Trả lời chi tiết, có con số thực tế.` }
       if (analysis?.aiAnalysis) {
         doc.font(fnB).fontSize(12).fill(DARK).text("PHAN TICH AI", M, doc.y);
         doc.moveDown(0.5);
-        doc.font(fnR).fontSize(9.5).fill("#000000").text(String(analysis.aiAnalysis).substring(0, 4000), M, doc.y, { width: W - 2 * M });
+        doc.font(fnR).fontSize(9.5).fill("#000000").text(sanitizeClientName(String(analysis.aiAnalysis), project.clientName || "").substring(0, 4000), M, doc.y, { width: W - 2 * M });
       }
 
       // === S2: Layout ===
@@ -1942,7 +1973,7 @@ Trả lời chi tiết, có con số thực tế.` }
             const y = doc.y;
             doc.rect(M, y, W - 2 * M, 20).fill(LIGHT_BG);
             doc.fill("#000000").font(fnR).fontSize(10);
-            doc.text(`  ${room.name}`, M + 10, y + 4, { width: 200 });
+            doc.text(`  ${sanitizeClientName(room.name, project.clientName || "")}`, M + 10, y + 4, { width: 200 });
             doc.text(`${room.w}m x ${room.h}m`, M + 220, y + 4, { width: 100 });
             doc.font(fnB).text(`${ra.toFixed(1)} m2`, M + 340, y + 4, { width: 80 });
             doc.y = y + 22;
@@ -1957,7 +1988,7 @@ Trả lời chi tiết, có con số thực tế.` }
       // === S3: CAD ===
       divider(3, "BAN VE KY THUAT", "Ban ve CAD & thong so ky thuat");
       sectHead("3. BAN VE KY THUAT");
-      if (cad?.cadDescription) doc.font(fnR).fontSize(9.5).text(cad.cadDescription.substring(0, 4000), M, doc.y, { width: W - 2 * M });
+      if (cad?.cadDescription) doc.font(fnR).fontSize(9.5).text(sanitizeClientName(cad.cadDescription, project.clientName || "").substring(0, 4000), M, doc.y, { width: W - 2 * M });
       if (cad?.cadDrawings) {
         for (const d of cad.cadDrawings) {
           if (d.imageUrl) drawPageWithTitleBlock(d.imageUrl, d.name || "Ban ve ky thuat", "BAN VE CAD", "1/100");
@@ -1967,7 +1998,7 @@ Trả lời chi tiết, có con số thực tế.` }
       // === S4: Facade with title block ===
       divider(4, "THIET KE MAT TIEN", "Kien truc ngoai that & phoi canh");
       sectHead("4. THIET KE MAT TIEN");
-      if (model3d?.designDescription) doc.font(fnR).fontSize(9.5).text(model3d.designDescription.substring(0, 4000), M, doc.y, { width: W - 2 * M });
+      if (model3d?.designDescription) doc.font(fnR).fontSize(9.5).text(sanitizeClientName(model3d.designDescription, project.clientName || "").substring(0, 4000), M, doc.y, { width: W - 2 * M });
       const facadeLabels = ["Mat tien ban ngay", "Mat tien ban dem", "Goc nhin 45 do", "Phoi canh tong the"];
       if (model3d?.facadeImages) {
         for (let i = 0; i < model3d.facadeImages.length; i++) {
@@ -1978,7 +2009,7 @@ Trả lời chi tiết, có con số thực tế.` }
       // === S5: Interior with title block ===
       divider(5, "THIET KE NOI THAT", "Noi that tung phong & vat lieu");
       sectHead("5. THIET KE NOI THAT");
-      if (interior?.interiorDescription) doc.font(fnR).fontSize(9.5).text(interior.interiorDescription.substring(0, 4000), M, doc.y, { width: W - 2 * M });
+      if (interior?.interiorDescription) doc.font(fnR).fontSize(9.5).text(sanitizeClientName(interior.interiorDescription, project.clientName || "").substring(0, 4000), M, doc.y, { width: W - 2 * M });
       if (interior?.interiorImages) {
         for (const img of interior.interiorImages) {
           drawPageWithTitleBlock(img.url, img.name || "Noi that", "THIET KE NOI THAT", "");
@@ -2202,6 +2233,12 @@ ${knowledgeContext}
 QUAN TRỌNG - Gửi email PDF:
 Khi khách hàng cung cấp email và yêu cầu gửi hồ sơ PDF, bạn PHẢI bao gồm tag đặc biệt trong phản hồi: [SEND_EMAIL:địa_chỉ_email@example.com]
 Ví dụ: Nếu khách nói "gửi cho tôi qua email abc@gmail.com", bạn phản hồi kèm tag [SEND_EMAIL:abc@gmail.com] ở cuối tin nhắn.
+
+RÀNG BUỘC HÀNH VI NGHIÊM NGẶT:
+- KHÔNG được hứa hẹn thời hạn cụ thể kiểu "3 tiếng tôi sẽ gửi", "tôi sẽ hoàn thiện và gửi email cho bạn" — bạn không phải nhân viên, không thể thực hiện tác vụ ngoài tool này.
+- KHÔNG đóng vai nhân viên hoặc tư vấn viên hứa hẹn giao file/tài liệu ngoài phạm vi công cụ AI này.
+- KHÔNG lặp lại bất kỳ câu mẹo/tip cố định nào (ví dụ: "Mẹo: Sàn gỗ công nghiệp...") nếu đã từng nói câu đó trong cuộc hội thoại này.
+- Chỉ hỗ trợ kỹ thuật thiết kế kiến trúc và nội thất trong phạm vi công cụ AI này.
 
 Trả lời ngắn gọn, chuyên nghiệp, bằng tiếng Việt. Đưa ra gợi ý cụ thể và thực tế dựa trên Cẩm nang BMT.
 ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham khảo và trích dẫn nguồn khi phù hợp." : ""}`;
