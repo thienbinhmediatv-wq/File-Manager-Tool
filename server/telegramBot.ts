@@ -138,13 +138,36 @@ function unlockAdmin(userId: number) {
   adminUnlocked.set(userId, { unlockedAt: Date.now(), unlockExpire: timeout });
 }
 
+let activeBotInstance: Telegraf | null = null;
+
+function stopActiveBot(signal: string) {
+  if (activeBotInstance) {
+    try {
+      activeBotInstance.stop(signal);
+    } catch (_) {}
+    activeBotInstance = null;
+  }
+}
+
+process.once("SIGINT", () => stopActiveBot("SIGINT"));
+process.once("SIGTERM", () => stopActiveBot("SIGTERM"));
+
 export function startTelegramBot() {
   if (!BOT_TOKEN) {
     console.log("[TelegramBot] No TELEGRAM_BOT_TOKEN, skipping");
     return;
   }
 
+  if (activeBotInstance) {
+    console.log("[TelegramBot] Stopping existing bot instance before re-launch...");
+    try {
+      activeBotInstance.stop("RESTART");
+    } catch (_) {}
+    activeBotInstance = null;
+  }
+
   const bot = new Telegraf(BOT_TOKEN);
+  activeBotInstance = bot;
 
   bot.start(async (ctx) => {
     const name = ctx.from?.first_name || "bạn";
@@ -367,17 +390,15 @@ export function startTelegramBot() {
     console.error("[TelegramBot] Error:", err.message);
   });
 
-  process.once("SIGINT", () => bot.stop("SIGINT"));
-  process.once("SIGTERM", () => bot.stop("SIGTERM"));
-
-  const MAX_LAUNCH_ATTEMPTS = 3;
-  const RETRY_DELAY_MS = 3000;
+  const MAX_LAUNCH_ATTEMPTS = 5;
+  const RETRY_DELAY_MS = 6000;
 
   (async () => {
     for (let attempt = 1; attempt <= MAX_LAUNCH_ATTEMPTS; attempt++) {
       try {
         await bot.telegram.deleteWebhook({ drop_pending_updates: false });
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await bot.telegram.callApi("getUpdates", { offset: -1, limit: 1, timeout: 0 });
+        await new Promise((resolve) => setTimeout(resolve, 4000));
 
         await bot.launch(
           { allowedUpdates: ["message", "callback_query"] },
@@ -393,6 +414,7 @@ export function startTelegramBot() {
           await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
         } else {
           console.error("[TelegramBot] ❌ All launch attempts failed. Bot is NOT running.");
+          activeBotInstance = null;
         }
       }
     }
