@@ -1,6 +1,6 @@
 import { StepWrapper } from "./StepWrapper";
 import type { Project } from "@shared/schema";
-import { FileText, Download, Cloud, HardDrive, BookOpen, Image, Calculator, Home, Paintbrush, Camera, FileCheck, Mail, Loader2, CheckCircle2 } from "lucide-react";
+import { FileText, Download, Cloud, HardDrive, BookOpen, Image, Calculator, Home, Paintbrush, Camera, FileCheck, Mail, Loader2, CheckCircle2, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
@@ -36,6 +36,10 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, on
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailSentSuccess, setEmailSentSuccess] = useState(false);
+  const [phoneInput, setPhoneInput] = useState("");
+  const [showZaloForm, setShowZaloForm] = useState(false);
+  const [isSendingZalo, setIsSendingZalo] = useState(false);
+  const [zaloSentSuccess, setZaloSentSuccess] = useState(false);
   const { toast } = useToast();
   const result = project.pdfEstimate as {
     pageCount?: number;
@@ -204,6 +208,78 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, on
                       <CheckCircle2 className="w-3 h-3" /> Đã gửi thành công!
                     </p>
                   )}
+                </div>
+              )}
+
+              <Button
+                variant="outline"
+                className="w-full rounded-xl h-10 border-blue-300 text-blue-700 hover:bg-blue-50"
+                onClick={() => { setShowZaloForm(!showZaloForm); setZaloSentSuccess(false); }}
+                data-testid="button-toggle-zalo-form"
+              >
+                <MessageCircle className="w-4 h-4 mr-2" />
+                {showZaloForm ? "Ẩn gửi Zalo" : "Gửi qua Zalo"}
+              </Button>
+
+              {showZaloForm && (
+                <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-xl p-4 space-y-3">
+                  <p className="text-sm text-blue-700 dark:text-blue-300 font-medium">Nhập số điện thoại Zalo khách hàng:</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="tel"
+                      value={phoneInput}
+                      onChange={(e) => { setPhoneInput(e.target.value); setZaloSentSuccess(false); }}
+                      placeholder="0901234567"
+                      className="flex-1 rounded-lg border border-blue-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      data-testid="input-zalo-phone"
+                    />
+                    <Button
+                      disabled={!phoneInput.trim() || isSendingZalo || zaloSentSuccess}
+                      onClick={async () => {
+                        setIsSendingZalo(true);
+                        try {
+                          const res = await fetch(`/api/projects/${project.id}/send-zalo`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ phone: phoneInput.trim() }),
+                          });
+                          const data = await res.json();
+                          if (res.ok && data.success) {
+                            setZaloSentSuccess(true);
+                            const isZalo = data.channel === "zalo";
+                            toast({
+                              title: isZalo ? "Gửi Zalo thành công!" : "Đã dùng email dự phòng",
+                              description: data.message,
+                            });
+                          } else {
+                            toast({ title: "Lỗi gửi Zalo", description: data.message || "Không thể gửi qua Zalo. Vui lòng thử lại.", variant: "destructive" });
+                          }
+                        } catch {
+                          toast({ title: "Lỗi", description: "Không thể gửi qua Zalo. Vui lòng thử lại.", variant: "destructive" });
+                        } finally {
+                          setIsSendingZalo(false);
+                        }
+                      }}
+                      className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4"
+                      data-testid="button-send-zalo"
+                    >
+                      {isSendingZalo ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : zaloSentSuccess ? (
+                        <CheckCircle2 className="w-4 h-4" />
+                      ) : (
+                        <MessageCircle className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+                  {zaloSentSuccess && (
+                    <p className="text-xs text-blue-600 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Đã gửi thành công!
+                    </p>
+                  )}
+                  <p className="text-xs text-blue-500 dark:text-blue-400">
+                    Nếu Zalo OA không khả dụng, hệ thống sẽ tự động dùng email dự phòng (nếu có).
+                  </p>
                 </div>
               )}
             </div>

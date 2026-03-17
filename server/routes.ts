@@ -10,6 +10,7 @@ import multer from "multer";
 import * as jose from "jose";
 import sharp from "sharp";
 import { sendPdfEmail } from "./emailService";
+import { sendFileViaZalo } from "./zaloService";
 import { getDriveKnowledge, listDriveFiles, clearDriveCache, processAllDriveFiles, getOcrProgress } from "./driveKnowledge";
 import { generateGeometry, LayoutValidationError } from "./geometry/geometryEngine.js";
 import type { GeometryResult } from "./geometry/geometryEngine.js";
@@ -1715,47 +1716,96 @@ Trả lời chi tiết, có con số thực tế.` }
       const GREEN_BG = "#f0fff4";
       const GREEN_TXT = "#276749";
 
-      // Pre-compress all base64 images before PDF generation (60% quality JPEG)
+      // Block PDF if no facade render image
+      if (!model3d?.facadeImages?.length && !renderResult?.renders?.length) {
+        return res.status(400).json({ message: "Chưa có hình ảnh phối cảnh mặt tiền. Vui lòng hoàn thành Bước 4 (Thiết kế mặt tiền) trước khi xuất PDF." });
+      }
+
+      // Pre-compress all base64 images in memory (no disk writes) – 60% quality JPEG
       const allDlImgUrls: string[] = [
         ...(model3d?.facadeImages || []),
         ...(interior?.interiorImages?.map((i: {url: string}) => i.url) || []),
         ...(renderResult?.renders?.map((r: {url: string}) => r.url) || []),
         ...(cad?.cadDrawings?.map((d: {imageUrl?: string}) => d.imageUrl || "") || []),
       ].filter(Boolean);
-      const dlCompressedCache = await preCompressImages(allDlImgUrls, 60);
+
+      // Build in-memory Buffer cache: base64 → compressed JPEG Buffer (no files on disk)
+      const dlCompressedCache = new Map<string, Buffer>();
+      await Promise.all(
+        allDlImgUrls.filter(u => u.startsWith("data:image/") && !u.startsWith("data:image/svg")).map(async (url) => {
+          try {
+            const match = url.match(/^data:image\/\w+;base64,(.+)$/);
+            if (!match) return;
+            const buf = await sharp(Buffer.from(match[1], "base64")).jpeg({ quality: 60 }).toBuffer();
+            dlCompressedCache.set(url, buf);
+          } catch { /* skip, resolveImg will handle fallback */ }
+        })
+      );
 
       const doc = new PDFDocument({ size: "A4", margin: 0 });
-      const tempFiles: string[] = [...dlCompressedCache.values()];
+      const tempFiles: string[] = [];
 
       if (fs.existsSync(fontRegular)) doc.registerFont("VN", fontRegular);
       if (fs.existsSync(fontBold)) doc.registerFont("VN-Bold", fontBold);
       const fnR = fs.existsSync(fontRegular) ? "VN" : "Helvetica";
       const fnB = fs.existsSync(fontBold) ? "VN-Bold" : "Helvetica-Bold";
 
-      const resolveImg = (imgUrl: string): string | null => {
+      const resolveImg = async (imgUrl: string): Promise<Buffer | string | null> => {
         if (!imgUrl) return null;
+
         if (dlCompressedCache.has(imgUrl)) return dlCompressedCache.get(imgUrl)!;
+
+        if (imgUrl.startsWith("data:image/svg") || imgUrl.includes(";base64,") && imgUrl.startsWith("data:image/svg")) {
+          try {
+            const match = imgUrl.match(/^data:image\/svg\+xml;base64,(.+)$/);
+            const svgData = match ? Buffer.from(match[1], "base64") : Buffer.from(imgUrl.replace(/^data:image\/svg\+xml,/, ""), "utf8");
+            const pngBuf = await sharp(svgData).png().toBuffer();
+            return pngBuf;
+          } catch { return null; }
+        }
+
         if (imgUrl.startsWith("data:image/")) {
           const match = imgUrl.match(/^data:image\/\w+;base64,(.+)$/);
           if (match) {
-            const tmpFile = path.join(GEN_DIR, `dl_${Date.now()}_${Math.random().toString(36).slice(2)}.png`);
             try {
-              fs.writeFileSync(tmpFile, Buffer.from(match[1], "base64"));
-              tempFiles.push(tmpFile);
-              return tmpFile;
+              return Buffer.from(match[1], "base64");
             } catch { return null; }
           }
           return null;
         }
+
         if (imgUrl.startsWith("/generated/")) {
           const f = path.join(GEN_DIR, path.basename(imgUrl));
-          return fs.existsSync(f) ? f : null;
+          if (!fs.existsSync(f)) return null;
+          if (f.endsWith(".svg")) {
+            try {
+              const pngBuf = await sharp(fs.readFileSync(f)).png().toBuffer();
+              return pngBuf;
+            } catch { return null; }
+          }
+          return f;
         }
+
         if (imgUrl.startsWith("/uploads/")) {
           const f = path.join(process.cwd(), "public", "uploads", path.basename(imgUrl));
-          return fs.existsSync(f) ? f : null;
+          if (!fs.existsSync(f)) return null;
+          if (f.endsWith(".svg")) {
+            try {
+              const pngBuf = await sharp(fs.readFileSync(f)).png().toBuffer();
+              return pngBuf;
+            } catch { return null; }
+          }
+          return f;
         }
+
         return null;
+      };
+
+      const drawPlaceholder = (label: string) => {
+        doc.addPage({ size: "A4", margin: 0 });
+        doc.rect(0, 0, W, H).fill("#E0E0E0");
+        doc.rect(W / 2 - 150, H / 2 - 40, 300, 80).fill("#BDBDBD");
+        doc.fill("#555555").font(fnR).fontSize(12).text(label, W / 2 - 150, H / 2 - 15, { width: 300, align: "center" });
       };
 
       const drawTitleBlock = (drawingTitle: string, itemName: string, scale?: string) => {
@@ -1860,18 +1910,24 @@ Trả lời chi tiết, có con số thực tế.` }
         doc.font(fnR).text(scale || "1/50", sbX + scaleBoxW + padL, cy);
       };
 
-      const drawPageWithTitleBlock = (imgUrl: string | null, drawingTitle: string, itemName: string, scale?: string) => {
+      const drawPageWithTitleBlock = async (imgUrl: string | null, drawingTitle: string, itemName: string, scale?: string) => {
         doc.addPage({ size: "A4", margin: 0 });
         const contentW = W - SB_W;
         const contentH = H;
 
         if (imgUrl) {
-          const p = resolveImg(imgUrl);
+          const p = await resolveImg(imgUrl);
           if (p) {
             try {
               doc.image(p, 0, 0, { width: contentW, height: contentH });
             } catch (e) { console.error("PDF img error:", e); }
+          } else {
+            doc.rect(0, 0, contentW, contentH).fill("#E0E0E0");
+            doc.fill("#555555").font(fnR).fontSize(10).text(`[Hình ảnh không khả dụng: ${drawingTitle}]`, 20, contentH / 2 - 10, { width: contentW - 40, align: "center" });
           }
+        } else {
+          doc.rect(0, 0, contentW, contentH).fill("#E0E0E0");
+          doc.fill("#555555").font(fnR).fontSize(10).text(`[Chưa có hình: ${drawingTitle}]`, 20, contentH / 2 - 10, { width: contentW - 40, align: "center" });
         }
 
         doc.rect(contentW, 0, SB_W, H).fill("#ffffff");
@@ -1933,7 +1989,7 @@ Trả lời chi tiết, có con số thực tế.` }
 
       const coverImgUrl = model3d?.facadeImages?.[0] || renderResult?.renders?.[0]?.url;
       if (coverImgUrl) {
-        const cp = resolveImg(coverImgUrl);
+        const cp = await resolveImg(coverImgUrl);
         if (cp) {
           try {
             const imgX = coverLeftW + 10;
@@ -1949,7 +2005,7 @@ Trả lời chi tiết, có con số thực tế.` }
 
       // === COVER IMAGE FULL PAGE ===
       if (coverImgUrl) {
-        const cp = resolveImg(coverImgUrl);
+        const cp = await resolveImg(coverImgUrl);
         if (cp) {
           try {
             doc.addPage({ size: "A4", margin: 0 });
@@ -2041,7 +2097,7 @@ Trả lời chi tiết, có con số thực tế.` }
       if (cad?.cadDescription) doc.font(fnR).fontSize(9.5).text(sanitizeClientName(cad.cadDescription, project.clientName || "").substring(0, 4000), M, doc.y, { width: W - 2 * M });
       if (cad?.cadDrawings) {
         for (const d of cad.cadDrawings) {
-          if (d.imageUrl) drawPageWithTitleBlock(d.imageUrl, d.name || "Ban ve ky thuat", "BAN VE CAD", "1/100");
+          if (d.imageUrl) await drawPageWithTitleBlock(d.imageUrl, d.name || "Ban ve ky thuat", "BAN VE CAD", "1/100");
         }
       }
 
@@ -2052,7 +2108,7 @@ Trả lời chi tiết, có con số thực tế.` }
       const facadeLabels = ["Mat tien ban ngay", "Mat tien ban dem", "Goc nhin 45 do", "Phoi canh tong the"];
       if (model3d?.facadeImages) {
         for (let i = 0; i < model3d.facadeImages.length; i++) {
-          drawPageWithTitleBlock(model3d.facadeImages[i], facadeLabels[i] || `Phoi canh ${i + 1}`, "PHOI CANH MAT TIEN", "");
+          await drawPageWithTitleBlock(model3d.facadeImages[i], facadeLabels[i] || `Phoi canh ${i + 1}`, "PHOI CANH MAT TIEN", "");
         }
       }
 
@@ -2062,7 +2118,7 @@ Trả lời chi tiết, có con số thực tế.` }
       if (interior?.interiorDescription) doc.font(fnR).fontSize(9.5).text(sanitizeClientName(interior.interiorDescription, project.clientName || "").substring(0, 4000), M, doc.y, { width: W - 2 * M });
       if (interior?.interiorImages) {
         for (const img of interior.interiorImages) {
-          drawPageWithTitleBlock(img.url, img.name || "Noi that", "THIET KE NOI THAT", "");
+          await drawPageWithTitleBlock(img.url, img.name || "Noi that", "THIET KE NOI THAT", "");
         }
       }
 
@@ -2070,7 +2126,7 @@ Trả lời chi tiết, có con số thực tế.` }
       divider(6, "RENDER PHOI CANH", "Hinh anh 3D photorealistic chat luong cao");
       if (renderResult?.renders) {
         for (const r of renderResult.renders) {
-          drawPageWithTitleBlock(r.url, r.name, "RENDER 3D", "");
+          await drawPageWithTitleBlock(r.url, r.name, "RENDER 3D", "");
         }
       }
 
@@ -2217,6 +2273,53 @@ Trả lời chi tiết, có con số thực tế.` }
     } catch (err) {
       console.error("Send email error:", err);
       res.status(500).json({ success: false, message: "Gửi email thất bại" });
+    }
+  });
+
+  app.post("/api/projects/:id/send-zalo", async (req, res) => {
+    res.setTimeout(120000);
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid project ID" });
+      const { phone } = req.body;
+      if (!phone || !/^\d{9,15}$/.test(phone.replace(/\s+/g, ""))) {
+        return res.status(400).json({ message: "Số điện thoại không hợp lệ" });
+      }
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+
+      const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+      const host = req.get("host") || "thicongtramsac.vn";
+
+      const pdfApiUrl = `${protocol}://${host}/api/projects/${id}/download-pdf`;
+      const pdfResp = await fetch(pdfApiUrl);
+      if (!pdfResp.ok) {
+        return res.status(500).json({ message: "Không thể tạo PDF" });
+      }
+      const pdfBuffer = Buffer.from(await pdfResp.arrayBuffer());
+      const pdfRelPath = await savePdfToGenerated(id, pdfBuffer, project.title);
+      const publicPdfUrl = `https://thicongtramsac.vn${pdfRelPath}`;
+
+      try {
+        await sendFileViaZalo(phone.replace(/\s+/g, ""), publicPdfUrl);
+        return res.json({ success: true, channel: "zalo", message: `Đã gửi hồ sơ PDF qua Zalo đến số ${phone} thành công!` });
+      } catch (zaloErr: unknown) {
+        const zaloMsg = zaloErr instanceof Error ? zaloErr.message : String(zaloErr);
+        console.error("Zalo send failed, trying automatic email fallback:", zaloMsg);
+        const adminEmail = process.env.GMAIL_SENDER || "thienbinhmedia.tv@gmail.com";
+        const emailResult = await sendPdfEmail(adminEmail, project.title, project.clientName, publicPdfUrl);
+        if (emailResult.success) {
+          return res.json({
+            success: true,
+            channel: "email_fallback",
+            message: `Zalo không khả dụng (${zaloMsg}). Hệ thống đã tự động gửi hồ sơ PDF qua email dự phòng đến ${adminEmail}.`,
+          });
+        }
+        return res.status(500).json({ success: false, message: `Gửi Zalo thất bại: ${zaloMsg}. Email dự phòng cũng thất bại.` });
+      }
+    } catch (err) {
+      console.error("Send Zalo error:", err);
+      res.status(500).json({ success: false, message: "Gửi qua Zalo thất bại" });
     }
   });
 

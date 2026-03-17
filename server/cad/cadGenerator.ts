@@ -2,12 +2,18 @@ import * as fs from "fs";
 import * as path from "path";
 import type { GeometryResult, GeometryFloor, PositionedRoom } from "../geometry/geometryEngine.js";
 
-const SCALE = 60;
+let SCALE = 60;
 const MARGIN = 140;
 const DIM_OFFSET = 30;
 const DIM_LAYER_SPACING = 28;
 const TITLE_BLOCK_W = 180;
 const FONT = "Arial, sans-serif";
+
+function getScale(landWidthM: number): number {
+  if (landWidthM <= 5) return 100;
+  if (landWidthM <= 8) return 85;
+  return 70;
+}
 
 function m2px(meters: number): number {
   return meters * SCALE;
@@ -68,11 +74,14 @@ function drawFurniture(room: PositionedRoom, px: (m: number) => number): SvgEl[]
   const furnitureColor = "#AAAAAA";
   const furnitureStroke = "#888888";
   const strokeW = "0.8";
+  const roomWidthM = room.width;
+  const roomHeightM = room.height;
+  const scaleFactor = SCALE >= 100 ? 1.0 : SCALE >= 85 ? 0.9 : 0.8;
 
   switch (room.function) {
     case "living": {
-      const sofaW = Math.min(rw * 0.65, 110);
-      const sofaH = Math.min(rh * 0.25, 30);
+      const sofaW = Math.min(rw * (0.65 * scaleFactor), 110);
+      const sofaH = Math.min(rh * (0.25 * scaleFactor), 30);
       const sx = cx - sofaW / 2;
       const sy = ry + rh * 0.6;
       els.push(
@@ -89,24 +98,28 @@ function drawFurniture(room: PositionedRoom, px: (m: number) => number): SvgEl[]
       break;
     }
     case "bedroom": {
-      const bedW = Math.min(rw * 0.7, 100);
-      const bedH = Math.min(rh * 0.55, 90);
+      const bedW = Math.min(rw * (0.7 * scaleFactor), 100);
+      const bedH = Math.min(rh * (0.55 * scaleFactor), 90);
       const bx = cx - bedW / 2;
       const by = ry + rh * 0.25;
       els.push(
         el("rect", { x: bx, y: by, width: bedW, height: bedH, rx: 3, fill: furnitureColor, stroke: furnitureStroke, "stroke-width": strokeW }),
         el("rect", { x: bx + bedW * 0.1, y: by, width: bedW * 0.8, height: bedH * 0.3, rx: 2, fill: "#BBBBBB", stroke: furnitureStroke, "stroke-width": strokeW })
       );
-      const wardrobeW = Math.min(rw * 0.55, 80);
-      const wardrobeH = Math.min(rh * 0.18, 22);
+      const wardrobeW = Math.min(rw * (0.55 * scaleFactor), 80);
+      const wardrobeH = Math.min(rh * (0.18 * scaleFactor), 22);
+      const panelCount = Math.max(2, Math.round(roomWidthM * 0.55 / 0.5));
       els.push(
-        el("rect", { x: cx - wardrobeW / 2, y: ry + rh * 0.85 - wardrobeH, width: wardrobeW, height: wardrobeH, rx: 0, fill: furnitureColor, stroke: furnitureStroke, "stroke-width": strokeW }),
-        el("line", { x1: cx, y1: ry + rh * 0.85 - wardrobeH, x2: cx, y2: ry + rh * 0.85, stroke: furnitureStroke, "stroke-width": strokeW })
+        el("rect", { x: cx - wardrobeW / 2, y: ry + rh * 0.85 - wardrobeH, width: wardrobeW, height: wardrobeH, rx: 0, fill: furnitureColor, stroke: furnitureStroke, "stroke-width": strokeW })
       );
+      for (let pi = 1; pi < panelCount; pi++) {
+        const panelX = cx - wardrobeW / 2 + (wardrobeW / panelCount) * pi;
+        els.push(el("line", { x1: panelX, y1: ry + rh * 0.85 - wardrobeH, x2: panelX, y2: ry + rh * 0.85, stroke: furnitureStroke, "stroke-width": strokeW }));
+      }
       break;
     }
     case "kitchen": {
-      const counterH = Math.min(rh * 0.22, 26);
+      const counterH = Math.min(rh * (0.22 * scaleFactor), 26);
       const counterW = rw * 0.9;
       const kx = rx + rw * 0.05;
       const ky = ry + rh * 0.05;
@@ -115,22 +128,24 @@ function drawFurniture(room: PositionedRoom, px: (m: number) => number): SvgEl[]
         el("circle", { cx: kx + counterW * 0.35, cy: ky + counterH / 2, r: counterH * 0.3, fill: "none", stroke: furnitureStroke, "stroke-width": strokeW }),
         el("circle", { cx: kx + counterW * 0.65, cy: ky + counterH / 2, r: counterH * 0.3, fill: "none", stroke: furnitureStroke, "stroke-width": strokeW })
       );
-      const tableW = Math.min(rw * 0.5, 60);
-      const tableH = Math.min(rh * 0.3, 45);
+      const tableW = Math.min(rw * (0.5 * scaleFactor), 60);
+      const tableH = Math.min(rh * (0.3 * scaleFactor), 45);
       els.push(
         el("ellipse", { cx: cx, cy: ry + rh * 0.7, rx: tableW / 2, ry: tableH / 2, fill: "none", stroke: furnitureStroke, "stroke-width": strokeW })
       );
       break;
     }
     case "dining": {
-      const tableW = Math.min(rw * 0.55, 80);
-      const tableH = Math.min(rh * 0.4, 55);
+      const tableW = Math.min(rw * (0.55 * scaleFactor), 80);
+      const tableH = Math.min(rh * (0.4 * scaleFactor), 55);
       els.push(
         el("rect", { x: cx - tableW / 2, y: cy - tableH / 2, width: tableW, height: tableH, rx: 3, fill: "none", stroke: furnitureStroke, "stroke-width": strokeW })
       );
       const chairSize = Math.min(tableW * 0.2, 14);
-      for (let i = 0; i < 2; i++) {
-        const chairX = cx - tableW / 2 + tableW * 0.25 + i * tableW * 0.5 - chairSize / 2;
+      const tableSideM = Math.max(roomWidthM * 0.55, roomHeightM * 0.4);
+      const chairCount = Math.max(2, Math.round(tableSideM / 0.6));
+      for (let i = 0; i < chairCount; i++) {
+        const chairX = cx - tableW / 2 + (tableW / chairCount) * (i + 0.5) - chairSize / 2;
         els.push(
           el("rect", { x: chairX, y: cy - tableH / 2 - chairSize - 2, width: chairSize, height: chairSize, rx: 1, fill: furnitureColor, stroke: furnitureStroke, "stroke-width": strokeW }),
           el("rect", { x: chairX, y: cy + tableH / 2 + 2, width: chairSize, height: chairSize, rx: 1, fill: furnitureColor, stroke: furnitureStroke, "stroke-width": strokeW })
@@ -158,7 +173,7 @@ function drawFurniture(room: PositionedRoom, px: (m: number) => number): SvgEl[]
       break;
     }
     case "stair": {
-      const stepCount = Math.min(Math.floor(rh / 10), 12);
+      const stepCount = Math.min(Math.max(Math.round(roomHeightM / 0.28), 3), 18);
       const stepH = rh / Math.max(stepCount, 1);
       for (let i = 0; i < stepCount; i++) {
         const sy = ry + i * stepH;
@@ -233,7 +248,7 @@ function drawTitleBlock(
     { label: "CHỦ ĐẦU TƯ", value: "—" },
     { label: "ĐƠN VỊ THI CÔNG", value: "BMT DECOR" },
     { label: "DIRECTOR", value: "Võ Quốc Bảo" },
-    { label: "TỈ LỆ", value: "1/100" },
+    { label: "TỈ LỆ", value: `1/${SCALE}` },
     { label: "SỐ BẢN VẼ", value: drawingNo },
     { label: "KHU ĐẤT", value: `${landWidth}×${landLength}m` },
     { label: "DIỆN TÍCH SÀN", value: `${totalArea.toFixed(1)} m²` },
@@ -281,6 +296,7 @@ function groupRoomsByRow(rooms: PositionedRoom[]): Map<number, PositionedRoom[]>
 
 function generateFloorSVG(floor: GeometryFloor, geometry: GeometryResult, drawingNo: string): string {
   const { landWidth, landLength, setback } = geometry;
+  SCALE = getScale(landWidth);
   const planW = m2px(landWidth);
   const planH = m2px(landLength);
 
@@ -492,7 +508,7 @@ function generateFloorSVG(floor: GeometryFloor, geometry: GeometryResult, drawin
     el("text", {
       x: effectiveMarginLeft + planW / 2, y: svgH - 10,
       "text-anchor": "middle", "font-family": FONT, "font-size": "9", fill: "#555",
-    }, undefined, `MẶT BẰNG ${floorLabel}  -  TỈ LỆ 1:100  -  BMT DECOR`),
+    }, undefined, `MẶT BẰNG ${floorLabel}  -  TỈ LỆ 1:${SCALE}  -  BMT DECOR`),
     el("rect", {
       x: effectiveMarginLeft, y: effectiveMarginLeft, width: planW, height: planH,
       fill: "none", stroke: "#111", "stroke-width": "2",
