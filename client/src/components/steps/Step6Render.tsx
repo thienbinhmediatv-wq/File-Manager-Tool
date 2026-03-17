@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Image, Video, Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useProgressPolling } from "@/hooks/use-progress-polling";
+import { ProgressCircle } from "@/components/ProgressCircle";
 
 const RENDER_ANGLES = [
   { id: "facade", label: "Mặt tiền ban ngày" },
@@ -44,6 +46,8 @@ export function Step6Render({ project, stepStatus, stepNumber, projectId, onProc
   const [generatingVideo, setGeneratingVideo] = useState<string | null>(null);
   const [selectedVideoModel, setSelectedVideoModel] = useState("minimax-image-to-video");
   const { toast } = useToast();
+  const isProcessingState = stepStatus === "processing";
+  const progressData = useProgressPolling(projectId, stepNumber, isProcessingState);
 
   const result = project.renderResult as {
     renders?: Array<{ name: string; url: string; angle: string }>;
@@ -107,6 +111,7 @@ export function Step6Render({ project, stepStatus, stepNumber, projectId, onProc
       backLabel={backLabel}
       isProcessing={isProcessing}
       isApproving={isApproving}
+      loadingContent={isProcessingState ? <ProgressCircle progress={progressData.progress} message={progressData.message} /> : undefined}
       resultContent={
         result && result.renders ? (
           <div className="space-y-4">

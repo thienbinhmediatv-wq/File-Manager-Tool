@@ -46,6 +46,7 @@ export const projects = pgTable("projects", {
   pdfEstimate: json("pdf_estimate"),
   chatHistory: json("chat_history").$type<Array<{ role: string; content: string; timestamp: string }>>().default([]),
   status: text("status").notNull().default("active"),
+  stepSubStatuses: json("step_sub_statuses").$type<Record<string, { phase: string; progress: number }>>().default({}),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -118,6 +119,7 @@ export const insertProjectSchema = createInsertSchema(projects).omit({
   pdfEstimate: true,
   chatHistory: true,
   status: true,
+  stepSubStatuses: true,
   selectedArchitecture: true,
   selectedInteriorStyle: true,
 });

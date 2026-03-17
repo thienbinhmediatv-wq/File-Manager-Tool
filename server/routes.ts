@@ -17,6 +17,8 @@ import type { GeometryResult } from "./geometry/geometryEngine.js";
 import { generateCADSVG, generateValidationErrorSVG } from "./cad/cadGenerator.js";
 import { renderWithControlNet } from "./replicateService.js";
 
+export const stepProgressMap = new Map<string, { progress: number; message: string }>();
+
 function buildBuildingDNA(geometryResult: GeometryResult, project: { floors: number; style: string; landWidth: number; landLength: number }): string {
   const floorDescriptions: string[] = [];
   const sortedFloors = [...geometryResult.floors].sort((a, b) => a.floor - b.floor);
@@ -587,6 +589,16 @@ export async function registerRoutes(
     res.json(updated);
   });
 
+  app.get("/api/projects/:id/step/:step/status", async (req, res) => {
+    const id = parseInt(req.params.id);
+    const step = parseInt(req.params.step);
+    if (isNaN(id) || isNaN(step) || step < 1 || step > 7) return res.status(400).json({ progress: 0, message: "Invalid params" });
+    const key = `${id}-${step}`;
+    const entry = stepProgressMap.get(key);
+    if (!entry) return res.json({ progress: 0, message: "" });
+    return res.json({ progress: entry.progress, message: entry.message });
+  });
+
   app.post("/api/projects/:id/step/:step/process", async (req, res) => {
     const id = parseInt(req.params.id);
     const step = parseInt(req.params.step);
@@ -602,6 +614,7 @@ export async function registerRoutes(
     }
 
     const statuses = { ...(project.stepStatuses as Record<string, string> || {}), [step]: "processing" };
+    stepProgressMap.delete(`${id}-${step}`);
     await storage.updateProject(id, { stepStatuses: statuses });
 
     res.json({ message: "Processing started", stepName: STEP_NAMES[step] });
@@ -619,11 +632,17 @@ export async function registerRoutes(
     const area = project.landWidth * project.landLength;
     const ctx = buildProjectContext(project as unknown as Record<string, unknown>);
 
+    function setSubStatus(progress: number, message: string) {
+      const key = `${id}-${step}`;
+      stepProgressMap.set(key, { progress, message });
+    }
+
     try {
       if (step === 1) {
         result = { collected: true, area, dimensions: `${project.landWidth}m x ${project.landLength}m` };
 
       } else if (step === 2) {
+        setSubStatus(10, "Đang gọi AI...");
         const setback = project.landWidth <= 5 ? 1.2 : 1.4;
         const uploadedFilesContext = (() => {
           const files = project.uploadedFiles as Array<{ name: string; type: string; url: string }> | null;
@@ -651,6 +670,8 @@ Hãy phân tích:
 
 KHÔNG hỏi thêm về Sổ đỏ, lộ giới, hay video khảo sát. Tự giả định và trả lời chi tiết ngay.` }
         ], 3000);
+
+        setSubStatus(15, "Đang phân tích dữ liệu...");
 
         const layoutText = await aiChat([
           { role: "system", content: "Bạn là kiến trúc sư AI. Trả về JSON thuần túy, không markdown. KHÔNG hỏi thêm thông tin." },
@@ -712,6 +733,7 @@ CHỈ trả về JSON, không giải thích.` }
           }
         }
 
+        setSubStatus(65, "Đang hoàn thiện...");
         result = {
           analysis: {
             dimensions: `${project.landWidth}m x ${project.landLength}m`,
@@ -725,6 +747,7 @@ CHỈ trả về JSON, không giải thích.` }
         };
 
       } else if (step === 3) {
+        setSubStatus(10, "Đang gọi AI...");
         const layout3 = project.layoutResult as { floors?: Array<{ floor: number; rooms: Array<{ name: string; w: number; h: number }> }> } | null;
         const layoutJson3 = layout3?.floors ? JSON.stringify(layout3.floors, null, 2) : "{}";
         const setback = project.landWidth <= 5 ? "1.2m" : "1.4m";
@@ -782,6 +805,8 @@ Yêu cầu mô tả ĐẦY ĐỦ:
 
 Trả lời chi tiết, đủ dữ liệu để vẽ CAD thực tế.` }
         ], 4000);
+
+        setSubStatus(35, "Đang tạo hình ảnh...");
 
         // --- Ưu tiên 1: Sinh SVG kỹ thuật trước ---
         let svgFloorplans: Array<{ floor: number; floorLabel: string; svgUrl: string }> = [];
@@ -868,6 +893,7 @@ Trả lời chi tiết, đủ dữ liệu để vẽ CAD thực tế.` }
           return { type, detail: warning, consequence };
         });
 
+        setSubStatus(65, "Đang hoàn thiện...");
         result = {
           cadDrawings,
           svgFloorplans,
@@ -887,6 +913,7 @@ Trả lời chi tiết, đủ dữ liệu để vẽ CAD thực tế.` }
         };
 
       } else if (step === 4) {
+        setSubStatus(10, "Đang gọi AI...");
         const facadeStyle = project.facadeStyle || project.style;
 
         let dnaAnchor = "";
@@ -907,6 +934,7 @@ Trả lời chi tiết, đủ dữ liệu để vẽ CAD thực tế.` }
           { name: "facade_aerial", prompt: `${dnaAnchor ? dnaAnchor + "aerial bird's eye camera angle. " : ""}Aerial bird's eye view of a ${project.floors}-story Vietnamese residential house, ${facadeStyle} architecture, showing rooftop and surrounding landscape, ${project.landWidth}m x ${project.landLength}m lot, professional architectural visualization, photorealistic, urban context` },
         ];
 
+        setSubStatus(35, "Đang tạo hình ảnh...");
         const [baseImage4, ...variantResults] = await Promise.all([
           aiGenerateImageWithReplicateFallback(cadSvgUrl4, basePrompt4, id, "facade_day"),
           ...facadeVariantPrompts.map(fp =>
@@ -919,6 +947,7 @@ Trả lời chi tiết, đủ dữ liệu để vẽ CAD thực tế.` }
 
         const facadeImages: string[] = [baseImage4, ...variantResults.filter(Boolean)];
 
+        setSubStatus(65, "Đang hoàn thiện...");
         const designText = await aiChat([
           { role: "system", content: `Bạn là kiến trúc sư AI của BMT Decor. Áp dụng Cẩm nang Tư duy Bước 4:
 - Mọi điểm nút trên 3D phải trùng khớp với tim trục và độ dày tường trong file CAD Bước 3.
@@ -965,6 +994,7 @@ Mô tả ĐẦY ĐỦ:
    - Thẩm mỹ BMT Decor: tinh tế, hiện đại?` }
         ], 4000);
 
+        setSubStatus(85, "Sắp xong rồi...");
         result = {
           facadeStyle,
           facadeImages,
@@ -972,6 +1002,7 @@ Mô tả ĐẦY ĐỦ:
         };
 
       } else if (step === 5) {
+        setSubStatus(10, "Đang gọi AI...");
         const isHighBudget = project.budget > 1500;
         const interiorText = await aiChat([
           { role: "system", content: `Bạn là nhà thiết kế nội thất AI của BMT Decor. Áp dụng Cẩm nang Tư duy Bước 5:
@@ -1025,6 +1056,7 @@ Trả lời chi tiết, có con số thực tế.` }
           { name: "Ban công / Sân thượng", key: "interior_balcony", prompt: `Beautiful ${project.style} Vietnamese house balcony terrace, tropical plants local species, outdoor lounge, warm evening lighting ambient, city view context 80% similar real surroundings, life-like atmosphere, 4K architectural photography` },
         ];
 
+        setSubStatus(35, "Đang tạo hình ảnh...");
         const interiorImages: Array<{name: string; url: string}> = await Promise.all(
           interiorPrompts.map(async (ip) => {
             try {
@@ -1037,6 +1069,7 @@ Trả lời chi tiết, có con số thực tế.` }
           })
         );
 
+        setSubStatus(85, "Sắp xong rồi...");
         result = {
           interiorDescription: interiorText,
           interiorImages,
@@ -1044,6 +1077,7 @@ Trả lời chi tiết, có con số thực tế.` }
         };
 
       } else if (step === 6) {
+        setSubStatus(10, "Đang gọi AI...");
         const dir6 = (project as any).direction || "Đông Nam";
         const isHighBudget6 = project.budget > 1500;
         const lightingDir = dir6.includes("Tây") ? "warm golden afternoon sunlight from west, sun shade louvers casting shadows" : dir6.includes("Đông") ? "fresh morning light from east, cool bright atmosphere" : "soft neutral natural light, overcast sky";
@@ -1072,6 +1106,7 @@ Trả lời chi tiết, có con số thực tế.` }
           { name: "Phòng bếp & ăn", prompt: `Photorealistic Vietnamese ${project.style} kitchen dining, golden triangle layout stove-sink-fridge, ${matDescriptor}, pendant lights over dining, backsplash tiles detail, life-like: cookbook fruit bowl on counter, ${lightingDir} through window, 8K professional interior visualization` },
         ];
 
+        setSubStatus(35, "Đang tạo hình ảnh...");
         const [exteriorResults, interiorResults] = await Promise.all([
           Promise.all(exteriorPrompts6.map(async (ep) => {
             try {
@@ -1095,9 +1130,12 @@ Trả lời chi tiết, có con số thực tế.` }
 
         const renders = [...exteriorResults, ...interiorResults].filter(r => r.url);
 
+        setSubStatus(65, "Đang hoàn thiện...");
+        setSubStatus(85, "Sắp xong rồi...");
         result = { renders };
 
       } else if (step === 7) {
+        setSubStatus(10, "Đang gọi AI...");
         const analysis = project.analysisResult as Record<string, string> | null;
         const layout = project.layoutResult as { floors?: Array<{ floor: number; rooms: Array<{ name: string; w: number; h: number }> }> } | null;
         const cad = project.cadResult as { cadDescription?: string; cadDrawings?: Array<{imageUrl?: string; name?: string}> } | null;
@@ -1181,6 +1219,7 @@ Trả lời chi tiết, có con số thực tế.` }
           footer: "Cảm ơn Quý khách đã tin tưởng sử dụng dịch vụ BMT DECOR — thicongtramsac.vn",
         };
 
+        setSubStatus(35, "Đang lưu dữ liệu...");
         try {
           const templateId = 1611894;
           const apiResult = await generatePdfViaApi(templateId, pdfApiData);
@@ -1194,6 +1233,7 @@ Trả lời chi tiết, có con số thực tế.` }
           console.error("PDF Generator API attempt failed, falling back to PDFKit:", e);
         }
 
+        setSubStatus(65, "Đang hoàn thiện...");
         // --- FALLBACK: PDFKIT ---
         if (!downloadUrl) {
           console.log(`Step 7: Using PDFKit fallback for project ${id}`);
@@ -1594,6 +1634,7 @@ Trả lời chi tiết, có con số thực tế.` }
           }
         }
 
+        setSubStatus(85, "Sắp xong rồi...");
         result = {
           pageCount,
           downloadUrl,
@@ -1604,6 +1645,8 @@ Trả lời chi tiết, có con số thực tế.` }
         };
       }
 
+      setSubStatus(100, "Hoàn thành");
+      setTimeout(() => stepProgressMap.delete(`${id}-${step}`), 10000);
       const finalStatuses = { ...(project.stepStatuses as Record<string, string> || {}), [step]: "completed" };
       const updateData: Record<string, unknown> = { stepStatuses: finalStatuses };
       if (step === 2) {

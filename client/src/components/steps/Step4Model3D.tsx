@@ -4,6 +4,8 @@ import type { Project } from "@shared/schema";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Box } from "lucide-react";
+import { useProgressPolling } from "@/hooks/use-progress-polling";
+import { ProgressCircle } from "@/components/ProgressCircle";
 
 const FACADE_STYLES = ["Modern", "Minimalist", "Neoclassic", "Industrial", "Tropical", "Wabi Sabi", "Indochine"];
 const COLORS = [
@@ -33,6 +35,8 @@ export function Step4Model3D({ project, stepStatus, stepNumber, projectId, onPro
   const [facadeStyle, setFacadeStyle] = useState(project.facadeStyle || project.style);
   const [colorScheme, setColorScheme] = useState("white-gray");
   const result = project.model3dResult as { facadeImages?: string[]; designDescription?: string; facadeStyle?: string } | null;
+  const isProcessingState = stepStatus === "processing";
+  const progressData = useProgressPolling(projectId, stepNumber, isProcessingState);
 
   const handleProcess = () => {
     onSubmit({ facadeStyle });
@@ -53,6 +57,7 @@ export function Step4Model3D({ project, stepStatus, stepNumber, projectId, onPro
       backLabel={backLabel}
       isProcessing={isProcessing}
       isApproving={isApproving}
+      loadingContent={isProcessingState ? <ProgressCircle progress={progressData.progress} message={progressData.message} /> : undefined}
       resultContent={
         result ? (
           <div className="space-y-4">

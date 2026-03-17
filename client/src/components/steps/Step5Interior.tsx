@@ -5,6 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Palette } from "lucide-react";
+import { useProgressPolling } from "@/hooks/use-progress-polling";
+import { ProgressCircle } from "@/components/ProgressCircle";
 
 const MATERIALS = [
   { id: "wood", label: "Gỗ tự nhiên" },
@@ -36,6 +38,8 @@ export function Step5Interior({ project, stepStatus, stepNumber, projectId, onPr
   const [selectedMaterials, setSelectedMaterials] = useState<Record<string, boolean>>({});
   const [interiorStyle, setInteriorStyle] = useState(project.style);
   const [lighting, setLighting] = useState("Ấm áp (Warm)");
+  const isProcessingState = stepStatus === "processing";
+  const progressData = useProgressPolling(projectId, stepNumber, isProcessingState);
   const result = project.interiorResult as {
     interiorDescription?: string;
     interiorImages?: Array<{ name: string; url: string }>;
@@ -56,6 +60,7 @@ export function Step5Interior({ project, stepStatus, stepNumber, projectId, onPr
       backLabel={backLabel}
       isProcessing={isProcessing}
       isApproving={isApproving}
+      loadingContent={isProcessingState ? <ProgressCircle progress={progressData.progress} message={progressData.message} /> : undefined}
       resultContent={
         result ? (
           <div className="space-y-4">

@@ -21,6 +21,7 @@ interface StepWrapperProps {
   children: ReactNode;
   resultContent?: ReactNode;
   forceShowForm?: boolean;
+  loadingContent?: ReactNode;
 }
 
 interface ImageGalleryImage {
@@ -148,7 +149,7 @@ export function ImageGallery({ images }: ImageGalleryProps) {
 
 export function StepWrapper({
   title, description, stepStatus, stepNumber, projectId, onProcess, onApprove, onRedo, onGoBack, backLabel,
-  isProcessing, isApproving, children, resultContent, forceShowForm,
+  isProcessing, isApproving, children, resultContent, forceShowForm, loadingContent,
 }: StepWrapperProps) {
   const showResult = stepStatus === "completed" || stepStatus === "approved" || (stepStatus === "processing" && !!resultContent);
   const showForm = forceShowForm || stepStatus === "pending" || stepStatus === "submitted" || stepStatus === "error";
@@ -187,14 +188,12 @@ export function StepWrapper({
       )}
 
       {isProcessingState && !resultContent && (
-        <div className="rounded-2xl border-2 border-dashed border-primary/30 p-10 flex flex-col items-center justify-center bg-primary/5 dark:bg-primary/10">
-          <div className="relative">
-            <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-            <Sparkles className="w-6 h-6 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
+        loadingContent || (
+          <div className="rounded-2xl border-2 border-dashed p-10 flex flex-col items-center justify-center" style={{ borderColor: "rgba(232,131,12,0.3)", background: "rgba(232,131,12,0.05)" }} data-testid="step-loading">
+            <Loader2 className="w-10 h-10 animate-spin" style={{ color: "#e8830c" }} />
+            <p className="mt-4 font-semibold text-sm" style={{ color: "#e8830c" }}>AI đang xử lý...</p>
           </div>
-          <p className="mt-4 font-semibold text-primary animate-pulse">AI đang xử lý...</p>
-          <p className="text-xs text-muted-foreground mt-1">Tạo hình ảnh có thể mất 30-60 giây. Vui lòng chờ.</p>
-        </div>
+        )
       )}
 
       {stepStatus === "error" && (
