@@ -111,7 +111,7 @@ export function Step5Interior({ project, stepStatus, stepNumber, projectId, onPr
 
         <div>
           <Label className="font-semibold mb-3 block">Vật liệu ưa thích</Label>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {MATERIALS.map(m => (
               <label key={m.id} className="flex items-center gap-2 p-3 rounded-xl border border-border/50 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer" data-testid={`checkbox-material-${m.id}`}>
                 <Checkbox

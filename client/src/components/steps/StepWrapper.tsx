@@ -217,7 +217,7 @@ export function StepWrapper({
 
       {!isProcessingState && (
         <div
-          className="sticky bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-t border-border/50 px-4 py-3 -mx-4 sm:-mx-6 sm:px-6 flex items-center justify-between gap-3"
+          className="sticky bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-t border-border/50 px-3 py-3 -mx-3 sm:-mx-6 sm:px-6 flex items-center justify-between gap-2"
           data-testid="step-bottom-bar"
         >
           {showForm && !isCompleted && !isApproved && (
@@ -226,10 +226,10 @@ export function StepWrapper({
                 <Button
                   onClick={onGoBack}
                   variant="outline"
-                  className="rounded-xl px-5 min-h-[44px] text-sm"
+                  className="rounded-xl px-3 sm:px-5 min-h-[44px] text-sm"
                   data-testid="button-go-back"
                 >
-                  <ChevronLeft className="w-4 h-4 mr-1.5" /> {backLabel || "Quay lại"}
+                  <ChevronLeft className="w-4 h-4 mr-1" /> <span className="hidden sm:inline">{backLabel || "Quay lại"}</span><span className="sm:hidden">Lại</span>
                 </Button>
               ) : (
                 <div />
@@ -237,7 +237,7 @@ export function StepWrapper({
               <Button
                 onClick={onProcess}
                 disabled={isProcessing}
-                className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 rounded-xl px-5 min-h-[44px] text-sm"
+                className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 rounded-xl px-3 sm:px-5 min-h-[44px] text-sm"
                 data-testid="button-ai-process"
               >
                 {isProcessing ? (
@@ -256,18 +256,18 @@ export function StepWrapper({
                   onClick={handleRedoWithLimit}
                   disabled={redoExhausted}
                   variant="outline"
-                  className="rounded-xl px-5 min-h-[44px] text-sm dark:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="rounded-xl px-3 sm:px-5 min-h-[44px] text-sm dark:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
                   data-testid="button-redo"
                   title={redoExhausted ? `Đã dùng hết ${REDO_LIMIT} lần làm lại cho bước này` : undefined}
                 >
                   {redoExhausted ? (
-                    <><Lock className="w-4 h-4 mr-1.5 text-red-500" /> Làm lại (đã dùng)</>
+                    <><Lock className="w-4 h-4 mr-1.5 text-red-500" /> <span className="hidden sm:inline">Làm lại (đã dùng)</span><span className="sm:hidden">Đã dùng</span></>
                   ) : (
-                    <><RotateCcw className="w-4 h-4 mr-1.5" /> Làm lại {isRedoLimited ? `(còn ${REDO_LIMIT - redoCount}/${REDO_LIMIT})` : ""}</>
+                    <><RotateCcw className="w-4 h-4 mr-1.5" /> <span className="hidden sm:inline">Làm lại {isRedoLimited ? `(còn ${REDO_LIMIT - redoCount}/${REDO_LIMIT})` : ""}</span><span className="sm:hidden">Lại</span></>
                   )}
                 </Button>
                 {isRedoLimited && (
-                  <span className="text-[10px] text-muted-foreground mt-1 pl-1">
+                  <span className="text-[10px] text-muted-foreground mt-1 pl-1 hidden sm:block">
                     {redoExhausted ? "Không thể làm lại thêm" : `Giới hạn ${REDO_LIMIT} lần/bước`}
                   </span>
                 )}
@@ -275,11 +275,11 @@ export function StepWrapper({
               <Button
                 onClick={onApprove}
                 disabled={isApproving}
-                className="bg-green-600 hover:bg-green-700 text-white rounded-xl px-5 min-h-[44px] text-sm shadow-lg shadow-green-600/20"
+                className="bg-green-600 hover:bg-green-700 text-white rounded-xl px-3 sm:px-5 min-h-[44px] text-sm shadow-lg shadow-green-600/20"
                 data-testid="button-approve"
               >
                 {isApproving ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Check className="w-4 h-4 mr-1.5" />}
-                Duyệt & Tiếp tục
+                <span className="hidden sm:inline">Duyệt & Tiếp tục</span><span className="sm:hidden">Duyệt</span>
               </Button>
             </>
           )}

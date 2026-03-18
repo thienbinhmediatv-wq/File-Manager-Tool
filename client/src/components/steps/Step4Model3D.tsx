@@ -91,7 +91,7 @@ export function Step4Model3D({ project, stepStatus, stepNumber, projectId, onPro
 
         <div>
           <Label className="font-semibold mb-2 block">Tông màu chủ đạo</Label>
-          <div className="grid grid-cols-5 gap-3">
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
             {COLORS.map(c => (
               <button
                 key={c.value}

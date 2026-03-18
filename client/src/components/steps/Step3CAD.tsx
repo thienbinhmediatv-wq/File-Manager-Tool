@@ -255,7 +255,7 @@ export function Step3CAD({ project, stepStatus, stepNumber, projectId, onProcess
             )}
 
             {/* Dimension Legend */}
-            <div className="grid grid-cols-3 gap-3 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
               <div className="bg-orange-50 border border-orange-200 rounded-xl p-3">
                 <div className="flex items-center gap-1 mb-1">
                   <Ruler className="w-3 h-3 text-orange-500" />

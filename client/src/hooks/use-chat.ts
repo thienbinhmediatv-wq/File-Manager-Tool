@@ -31,7 +31,7 @@ const STEP_GUIDANCE: Record<number, string> = {
   4: "Mô hình 3D đang được xử lý. Hãy cho tôi biết phong cách mặt tiền bạn yêu thích và tông màu mong muốn!",
   5: "Thiết kế nội thất bắt đầu! Cho tôi biết về vật liệu và đồ nội thất ưa thích. Tôi có thể gợi ý phù hợp với phong cách đã chọn.",
   6: "Render các góc nhìn đang được tạo. Tôi khuyên bạn nên xem ít nhất 3 góc: mặt trước, phối cảnh, và sân vườn. Bạn muốn thêm góc nào?",
-  7: "Hồ sơ PDF sẽ tổng hợp mọi thứ. Bạn muốn thêm nội dung gì? Cho tôi email hoặc số điện thoại để gửi file PDF cho bạn!",
+  7: "Hồ sơ PDF sẽ tổng hợp mọi thứ. Bạn muốn thêm nội dung gì? Để gửi file, hãy dùng nút Gửi Email hoặc Gửi Zalo bên dưới.",
 };
 
 const IDLE_TIPS: Record<number, string[]> = {
@@ -61,7 +61,7 @@ const IDLE_TIPS: Record<number, string[]> = {
   ],
   7: [
     "Mẹo: File PDF sẽ bao gồm tất cả bản vẽ, render và thông số kỹ thuật.",
-    "Cho tôi email hoặc số điện thoại để gửi file PDF hoàn chỉnh cho bạn nhé!",
+    "Khi PDF đã sẵn sàng, bạn có thể tải xuống hoặc dùng nút Gửi Email / Gửi Zalo bên dưới.",
   ],
 };
 
@@ -211,9 +211,6 @@ export function useChat(projectId: number) {
         }
       }
 
-      const emailMatch = message.match(/[\w.-]+@[\w.-]+\.\w+/);
-      const phoneMatch = message.match(/(?:\+84|0)\d{9,10}/);
-
       const res = await apiRequest("POST", "/api/chat", { projectId, message: enhancedMessage, step });
       const data = await res.json();
       const aiMsg: ChatMessage = {
@@ -231,12 +228,6 @@ export function useChat(projectId: number) {
         queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       }
 
-      if (emailMatch || phoneMatch) {
-        const contact = emailMatch ? emailMatch[0] : phoneMatch![0];
-        setTimeout(() => {
-          addAssistantMessage(`Cảm ơn bạn! Tôi đã ghi nhận thông tin liên hệ: ${contact}. File PDF sẽ được gửi đến bạn khi hoàn thành.`);
-        }, 1000);
-      }
 
       return data.reply;
     } catch {

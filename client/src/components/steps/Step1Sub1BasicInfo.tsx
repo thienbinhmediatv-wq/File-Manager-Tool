@@ -147,7 +147,7 @@ export function Step1Sub1BasicInfo({ onSubmit, isPending, existingProject }: Pro
             </FormItem>
           )} />
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-3 gap-2 sm:gap-4">
             <FormField control={form.control} name="bedrooms" render={({ field }) => (
               <FormItem>
                 <FormLabel className="font-semibold">Phòng ngủ</FormLabel>

@@ -132,12 +132,9 @@ export function FloatingChatCopilot({
         )}
 
         {isOpen && (
-          <div className="fixed inset-x-0 bottom-0 z-[70] animate-in slide-in-from-bottom duration-300" data-testid="mobile-chat-panel">
-            <div
-              className="bg-white dark:bg-slate-900 rounded-t-2xl shadow-2xl border border-border/50 flex flex-col"
-              style={{ height: "80vh" }}
-            >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
+          <div className="fixed inset-0 z-[70] animate-in slide-in-from-bottom duration-300 flex flex-col" data-testid="mobile-chat-panel">
+            <div className="flex-1 flex flex-col bg-white dark:bg-slate-900 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border/30 bg-primary/5 shrink-0">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                     <MessageSquare className="w-4 h-4 text-primary" />

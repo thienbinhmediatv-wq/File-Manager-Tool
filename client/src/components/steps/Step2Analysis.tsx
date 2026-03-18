@@ -68,7 +68,7 @@ export function Step2Analysis({ project, stepStatus, onProcess, onApprove, onRed
                 <div key={floor.floor} className="mb-4">
                   <p className="text-sm font-medium text-muted-foreground mb-2">Tầng {floor.floor}</p>
                   <div className="bg-slate-100 rounded-xl p-4">
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {floor.rooms.map((room, i) => (
                         <div
                           key={i}

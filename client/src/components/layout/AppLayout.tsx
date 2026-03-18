@@ -83,7 +83,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         <SidebarContent location={location} />
       </aside>
 
-      <main className="flex-1 md:ml-64 flex flex-col min-h-screen">
+      <main className="flex-1 md:ml-64 flex flex-col min-h-screen min-w-0 overflow-x-hidden">
         <header className="h-14 glass z-40 sticky top-0 px-4 sm:px-6 flex items-center justify-between border-b border-border/50">
           <div className="flex items-center gap-3">
             <Sheet>

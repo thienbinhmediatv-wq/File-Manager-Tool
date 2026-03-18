@@ -1,9 +1,8 @@
 import { StepWrapper } from "./StepWrapper";
 import type { Project } from "@shared/schema";
-import { FileText, Download, Cloud, HardDrive, BookOpen, Image, Calculator, Home, Paintbrush, Camera, FileCheck, Mail, Loader2, CheckCircle2, MessageCircle } from "lucide-react";
+import { FileText, Download, Cloud, HardDrive, BookOpen, Image, Calculator, Home, Paintbrush, Camera, FileCheck, Mail, Loader2, CheckCircle2, MessageCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 interface Props {
@@ -30,6 +29,17 @@ const sectionDetails = [
   "Bảng dự toán chi phí chi tiết",
 ];
 
+function getMissingSteps(project: Project): number[] {
+  const statuses = (project.stepStatuses as Record<string, string>) || {};
+  const missing: number[] = [];
+  for (let i = 1; i <= 7; i++) {
+    if (statuses[String(i)] !== "approved") {
+      missing.push(i);
+    }
+  }
+  return missing;
+}
+
 export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, onGoBack, backLabel, isProcessing, isApproving }: Props) {
   const [showPreview, setShowPreview] = useState(false);
   const [emailInput, setEmailInput] = useState("");
@@ -41,6 +51,27 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, on
   const [isSendingZalo, setIsSendingZalo] = useState(false);
   const [zaloSentSuccess, setZaloSentSuccess] = useState(false);
   const { toast } = useToast();
+
+  const missingSteps = getMissingSteps(project);
+  const allStepsApproved = missingSteps.length === 0;
+
+  const checkBeforeSend = (): boolean => {
+    if (!allStepsApproved) {
+      const stepNames: Record<number, string> = {
+        1: "Thu thập dữ liệu", 2: "Phân tích", 3: "CAD",
+        4: "3D Mặt tiền", 5: "Nội thất", 6: "Render", 7: "PDF",
+      };
+      const names = missingSteps.map(s => `Bước ${s} (${stepNames[s]})`).join(", ");
+      toast({
+        title: "Chưa hoàn thành đủ bước",
+        description: `Chưa hoàn thành: ${names}. Vui lòng duyệt đủ 7 bước trước khi gửi.`,
+        variant: "destructive",
+      });
+      return false;
+    }
+    return true;
+  };
+
   const result = project.pdfEstimate as {
     pageCount?: number;
     sections?: string[];
@@ -69,7 +100,7 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, on
               <FileText className="w-5 h-5 text-primary" /> Hồ sơ thiết kế đã hoàn thành
             </h3>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
               <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 rounded-xl p-3 text-center">
                 <span className="text-xs text-muted-foreground block">Số trang</span>
                 <p className="font-bold text-2xl text-blue-700 dark:text-blue-300" data-testid="text-page-count">{result.pageCount}</p>
@@ -146,10 +177,20 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, on
                 </Button>
               </a>
 
+              {!allStepsApproved && (
+                <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-xl p-3" data-testid="alert-steps-incomplete">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                    Chưa hoàn thành đủ 7 bước. Cần duyệt: {missingSteps.map(s => `Bước ${s}`).join(", ")}. Gửi file chỉ khả dụng sau khi hoàn thành.
+                  </p>
+                </div>
+              )}
+
               <Button
                 variant="outline"
-                className="w-full rounded-xl h-10 border-green-300 text-green-700 hover:bg-green-50"
-                onClick={() => setShowEmailForm(!showEmailForm)}
+                className="w-full rounded-xl h-10 border-green-300 text-green-700 hover:bg-green-50 disabled:opacity-50"
+                onClick={() => { if (checkBeforeSend()) setShowEmailForm(!showEmailForm); }}
+                disabled={!allStepsApproved}
                 data-testid="button-toggle-email-form"
               >
                 <Mail className="w-4 h-4 mr-2" />
@@ -171,6 +212,7 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, on
                     <Button
                       disabled={!emailInput.trim() || isSendingEmail || emailSentSuccess}
                       onClick={async () => {
+                        if (!checkBeforeSend()) return;
                         setIsSendingEmail(true);
                         try {
                           const res = await fetch(`/api/projects/${project.id}/send-email`, {
@@ -213,8 +255,9 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, on
 
               <Button
                 variant="outline"
-                className="w-full rounded-xl h-10 border-blue-300 text-blue-700 hover:bg-blue-50"
-                onClick={() => { setShowZaloForm(!showZaloForm); setZaloSentSuccess(false); }}
+                className="w-full rounded-xl h-10 border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                onClick={() => { if (checkBeforeSend()) { setShowZaloForm(!showZaloForm); setZaloSentSuccess(false); } }}
+                disabled={!allStepsApproved}
                 data-testid="button-toggle-zalo-form"
               >
                 <MessageCircle className="w-4 h-4 mr-2" />
@@ -236,6 +279,7 @@ export function Step7PDF({ project, stepStatus, onProcess, onApprove, onRedo, on
                     <Button
                       disabled={!phoneInput.trim() || isSendingZalo || zaloSentSuccess}
                       onClick={async () => {
+                        if (!checkBeforeSend()) return;
                         setIsSendingZalo(true);
                         try {
                           const res = await fetch(`/api/projects/${project.id}/send-zalo`, {
