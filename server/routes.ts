@@ -2681,6 +2681,17 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
     res.json({ success: true });
   });
 
+  app.post("/api/knowledge-files/import-design-docs", async (_req, res) => {
+    try {
+      const { importDesignDocuments } = await import("./importDesignDocs");
+      const result = await importDesignDocuments();
+      res.json({ success: true, ...result });
+    } catch (err) {
+      console.error("Import design docs error:", err);
+      res.status(500).json({ message: "Import failed", error: String(err) });
+    }
+  });
+
   app.post("/api/drive-ocr/process", async (_req, res) => {
     try {
       const progress = await processAllDriveFiles();
