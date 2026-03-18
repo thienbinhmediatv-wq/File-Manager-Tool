@@ -3003,8 +3003,8 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
-      const { name, parentId, icon, color } = req.body;
-      const updated = await storage.updateKnowledgeCategory(id, { name, parentId, icon, color });
+      const { name, parentId, icon, color, tags } = req.body;
+      const updated = await storage.updateKnowledgeCategory(id, { name, parentId, icon, color, tags });
       res.json(updated);
     } catch (err) {
       res.status(500).json({ message: "Failed to update category" });

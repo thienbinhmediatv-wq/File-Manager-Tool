@@ -65,6 +65,7 @@ export const knowledgeCategories = pgTable("knowledge_categories", {
   parentId: integer("parent_id"),
   icon: text("icon").default("folder"),
   color: text("color").default("orange"),
+  tags: text("tags").array().default([]),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
