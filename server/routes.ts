@@ -2397,11 +2397,12 @@ Trả lời chi tiết, có con số thực tế.` }
         }
         const kFiles = await storage.getKnowledgeFiles();
         if (kFiles.length > 0) {
-          const MAX_KNOWLEDGE_CHARS = 16000;
+          const MAX_KNOWLEDGE_CHARS = 50000;
           let totalChars = 0;
           const snippets: string[] = [];
-          for (const f of kFiles.slice(0, 12)) {
-            const snippet = f.content.slice(0, 3000);
+          for (const f of kFiles) {
+            if (totalChars >= MAX_KNOWLEDGE_CHARS) break;
+            const snippet = f.content.slice(0, 5000);
             if (totalChars + snippet.length > MAX_KNOWLEDGE_CHARS) break;
             snippets.push(`--- ${f.name} ---\n${snippet}`);
             totalChars += snippet.length;
@@ -2822,12 +2823,12 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
 
   const knowledgeUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024 },
+    limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
-      const allowed = [".txt", ".md", ".csv", ".json"];
+      const allowed = [".txt", ".md", ".csv", ".json", ".pdf", ".docx"];
       const ext = path.extname(file.originalname).toLowerCase();
       if (!allowed.includes(ext)) {
-        return cb(new Error("Chỉ hỗ trợ file .txt, .md, .csv, .json"));
+        return cb(new Error("Chỉ hỗ trợ file .txt, .md, .csv, .json, .pdf, .docx"));
       }
       cb(null, true);
     },
@@ -2839,15 +2840,16 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
       if (!fileId) return res.status(400).json({ message: "fileId required" });
 
       const { extractTextFromPdf, extractTextFromDocx, extractTextFromImage, getFileType } = await import("./ocrService");
-      const fileType = getFileType(fileId);
+      const name = fileName || fileId;
+      const fileType = getFileType(name);
       
       let content = "";
       if (fileType === "pdf") {
-        content = await extractTextFromPdf(fileId, fileId);
+        content = await extractTextFromPdf(fileId, name);
       } else if (fileType === "docx") {
-        content = await extractTextFromDocx(fileId, fileId);
+        content = await extractTextFromDocx(fileId, name);
       } else if (fileType === "image") {
-        content = await extractTextFromImage(fileId, fileId);
+        content = await extractTextFromImage(fileId, name);
       } else {
         const buffer = await (await import("./ocrService")).downloadFileBuffer(fileId);
         content = buffer?.toString("utf-8") || "";
@@ -2857,13 +2859,13 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
         return res.status(400).json({ message: "Không thể trích xuất nội dung từ file" });
       }
 
-      const name = fileName || fileId;
       const file = await storage.createKnowledgeFile({
         name,
         originalName: `Drive-${name}`,
         content: content.slice(0, 50000),
-        fileType: "drive",
+        fileType: fileType === "unknown" ? "drive" : fileType,
         fileSize: content.length,
+        source: "drive",
       });
 
       res.json({ success: true, file, chars: content.length });
@@ -2878,17 +2880,47 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
       }
-      const content = req.file.buffer.toString("utf-8");
       const ext = path.extname(req.file.originalname).toLowerCase();
-      const fileType = ext === ".json" ? "json" : ext === ".csv" ? "csv" : ext === ".md" ? "markdown" : "text";
       const name = path.basename(req.file.originalname, ext);
+      let content = "";
+      let fileType = "text";
+
+      if (ext === ".pdf") {
+        try {
+          const pdfParse = require("pdf-parse");
+          const data = await pdfParse(req.file.buffer);
+          content = data.text?.trim() || "";
+          fileType = "pdf";
+        } catch (pdfErr) {
+          console.error("PDF parse error:", pdfErr);
+          return res.status(400).json({ message: "Không thể đọc nội dung PDF. File có thể là ảnh scan hoặc bị lỗi." });
+        }
+      } else if (ext === ".docx") {
+        try {
+          const mammoth = await import("mammoth");
+          const result = await mammoth.extractRawText({ buffer: req.file.buffer });
+          content = result.value?.trim() || "";
+          fileType = "docx";
+        } catch (docxErr) {
+          console.error("DOCX parse error:", docxErr);
+          return res.status(400).json({ message: "Không thể đọc nội dung DOCX." });
+        }
+      } else {
+        content = req.file.buffer.toString("utf-8");
+        fileType = ext === ".json" ? "json" : ext === ".csv" ? "csv" : ext === ".md" ? "markdown" : "text";
+      }
+
+      if (!content) {
+        return res.status(400).json({ message: "File không có nội dung văn bản có thể đọc được." });
+      }
 
       const file = await storage.createKnowledgeFile({
         name,
         originalName: req.file.originalname,
-        content,
+        content: content.slice(0, 200000),
         fileType,
-        fileSize: req.file.size,
+        fileSize: content.length,
+        source: "upload",
       });
       res.json({
         id: file.id,

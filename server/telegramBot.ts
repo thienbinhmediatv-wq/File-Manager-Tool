@@ -13,8 +13,8 @@ const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
 });
 
-const MAX_KNOWLEDGE_CHARS = 12000;
-const ALLOWED_EXTENSIONS = [".md", ".txt", ".json", ".csv"];
+const MAX_KNOWLEDGE_CHARS = 40000;
+const ALLOWED_EXTENSIONS = [".md", ".txt", ".json", ".csv", ".pdf", ".docx"];
 const UNLOCK_TIMEOUT = 60 * 60 * 1000; // 1 hour
 
 const userSessions: Map<number, { messages: { role: string; content: string }[] }> = new Map();
@@ -31,7 +31,8 @@ async function buildSystemPrompt(): Promise<string> {
   let totalChars = 0;
   for (const file of knowledgeFiles) {
     if (totalChars >= MAX_KNOWLEDGE_CHARS) break;
-    const snippet = file.content.slice(0, MAX_KNOWLEDGE_CHARS - totalChars);
+    const snippet = file.content.slice(0, 5000);
+    if (totalChars + snippet.length > MAX_KNOWLEDGE_CHARS) break;
     knowledgeContext += `\n--- ${file.originalName} ---\n${snippet}\n`;
     totalChars += snippet.length;
   }
@@ -92,7 +93,7 @@ async function askAI(userId: number, userMessage: string): Promise<string> {
   }
 }
 
-async function downloadTelegramFile(fileId: string): Promise<string | null> {
+async function downloadTelegramFileBuffer(fileId: string): Promise<Buffer | null> {
   try {
     const fileInfoRes = await fetch(
       `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`
@@ -106,7 +107,8 @@ async function downloadTelegramFile(fileId: string): Promise<string | null> {
     );
     if (!fileRes.ok) return null;
 
-    return await fileRes.text();
+    const arrayBuffer = await fileRes.arrayBuffer();
+    return Buffer.from(arrayBuffer);
   } catch (err: any) {
     console.error("[TelegramBot] Download error:", err.message);
     return null;
@@ -282,7 +284,7 @@ export function startTelegramBot() {
     unlockAdmin(userId);
     await ctx.reply(
       `✅ *Đã unlock Admin Mode!*\n\n` +
-      `⏱️ Bạn có 1 giờ để upload file tri thức (.md, .txt, .json, .csv)\n` +
+      `⏱️ Bạn có 1 giờ để upload file tri thức (.md, .txt, .json, .csv, .pdf, .docx)\n` +
       `📎 Gửi file bình thường (attach file) để lưu vào kho tri thức.\n\n` +
       `_Sau 1 giờ sẽ tự động lock lại._`,
       { parse_mode: "Markdown" }
@@ -328,10 +330,43 @@ export function startTelegramBot() {
     await ctx.reply(`⏳ Đang xử lý file *${fileName}*...`, { parse_mode: "Markdown" });
 
     try {
-      const content = await downloadTelegramFile(doc.file_id);
-      if (!content) {
+      const buffer = await downloadTelegramFileBuffer(doc.file_id);
+      if (!buffer) {
         await ctx.reply("❌ Không thể tải file. Vui lòng thử lại.");
         return;
+      }
+
+      let content = "";
+      if (fileExt === ".pdf") {
+        try {
+          const pdfParse = require("pdf-parse");
+          const data = await pdfParse(buffer);
+          content = data.text?.trim() || "";
+          if (!content) {
+            await ctx.reply("⚠️ PDF không có text layer (có thể là ảnh scan). Không thể trích xuất nội dung.");
+            return;
+          }
+        } catch (pdfErr: any) {
+          console.error("[TelegramBot] PDF parse error:", pdfErr.message);
+          await ctx.reply("❌ Không thể đọc nội dung PDF. File có thể bị lỗi.");
+          return;
+        }
+      } else if (fileExt === ".docx") {
+        try {
+          const mammoth = await import("mammoth");
+          const result = await mammoth.extractRawText({ buffer });
+          content = result.value?.trim() || "";
+          if (!content) {
+            await ctx.reply("⚠️ DOCX không có nội dung văn bản.");
+            return;
+          }
+        } catch (docxErr: any) {
+          console.error("[TelegramBot] DOCX parse error:", docxErr.message);
+          await ctx.reply("❌ Không thể đọc nội dung DOCX.");
+          return;
+        }
+      } else {
+        content = buffer.toString("utf-8");
       }
 
       const trimmedContent = content.slice(0, 200000);
@@ -341,7 +376,8 @@ export function startTelegramBot() {
         originalName: fileName,
         content: trimmedContent,
         fileType: fileExt.replace(".", ""),
-        fileSize: Buffer.byteLength(trimmedContent, "utf8"),
+        fileSize: trimmedContent.length,
+        source: "telegram_bot",
       });
 
       const charCount = trimmedContent.length;
@@ -350,7 +386,7 @@ export function startTelegramBot() {
       await ctx.reply(
         `✅ *Đã lưu vào kho tri thức!*\n\n` +
         `📄 File: *${fileName}*\n` +
-        `📊 Dung lượng: ${Math.round(doc.file_size! / 1024)}KB\n` +
+        `📊 Dung lượng: ${doc.file_size ? Math.round(doc.file_size / 1024) + "KB" : "N/A"}\n` +
         `✏️ Ký tự: ${charCount.toLocaleString()}\n` +
         `📝 Từ: ${wordCount.toLocaleString()}\n\n` +
         `🧠 AI của BMT Decor sẽ sử dụng tri thức này ngay lập tức!`,

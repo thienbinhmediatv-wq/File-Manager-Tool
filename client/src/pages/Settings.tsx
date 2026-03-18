@@ -310,7 +310,7 @@ export default function Settings() {
   const handleFileUpload = () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".txt,.md,.csv,.json,.pdf";
+    input.accept = ".txt,.md,.csv,.json,.pdf,.docx";
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) uploadMutation.mutate(file);
@@ -507,7 +507,7 @@ export default function Settings() {
                     </div>
                     <div className="flex-1">
                       <CardTitle className="text-sm">Upload Tri Thức</CardTitle>
-                      <CardDescription className="text-xs">TXT • MD • JSON • PDF (5MB)</CardDescription>
+                      <CardDescription className="text-xs">TXT • MD • CSV • JSON • PDF • DOCX (10MB)</CardDescription>
                     </div>
                     <Button size="sm" onClick={handleFileUpload} disabled={uploadMutation.isPending} className="gap-1.5" data-testid="button-upload-knowledge-2">
                       {uploadMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
@@ -1218,7 +1218,7 @@ function KnowledgeFileRow({
             ) : null}
           </div>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            <span className="text-xs text-muted-foreground">{formatFileSize(file.fileSize)}</span>
+            <span className="text-xs text-muted-foreground">{file.fileSize.toLocaleString()} ký tự</span>
             <span className="text-muted-foreground">·</span>
             {/* Category */}
             {category ? (
@@ -1510,7 +1510,7 @@ function DriveLinksLearner() {
     }
   };
 
-  const driveFiles = filesQuery.data?.filter(f => f.fileType === "drive") || [];
+  const driveFiles = filesQuery.data?.filter(f => f.source === "drive" || f.source === "google_drive") || [];
 
   return (
     <div className="space-y-3">

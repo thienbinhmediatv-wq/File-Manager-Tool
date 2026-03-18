@@ -96,6 +96,7 @@ export async function processAllDriveFiles(): Promise<OcrProgress> {
             content: text.slice(0, 100000),
             fileType: getFileType(file.name),
             fileSize: text.length,
+            source: "drive",
           });
           ocrProgress!.results.push({ name: file.name, chars: text.length, status: "ok" });
         } else {
