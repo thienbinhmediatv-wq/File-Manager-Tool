@@ -8,3 +8,6 @@ attached_assets/Mau_3D_9_1773816624596.pdf filter=lfs diff=lfs merge=lfs -text
 attached_assets/Mau_banve_3D_10_1773816385463.pdf filter=lfs diff=lfs merge=lfs -text
 attached_assets/Mau_banve_3D_10_1773816456400.pdf filter=lfs diff=lfs merge=lfs -text
 attached_assets/Mau_banve_3D_10_1773816624596.pdf filter=lfs diff=lfs merge=lfs -text
+attached_assets/backup_all.zip filter=lfs diff=lfs merge=lfs -text
+backup_all.zip filter=lfs diff=lfs merge=lfs -text
+backup_production_real.sql filter=lfs diff=lfs merge=lfs -text
