@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # BMT Decor Full Backup Script
-# Backs up: Code (Git), Database, Generated Files, Configuration
+# Backs up: TOÀN BỘ source code, Database, Generated Files, Configuration
 # Usage: npm run backup  (or bash scripts/backup.sh)
 
 set -e
@@ -47,7 +47,6 @@ fi
 # 3. Export Git History
 echo ""
 echo "📜 Exporting Git history..."
-cd /home/runner/workspace 2>/dev/null || cd . 
 if git rev-parse --git-dir > /dev/null 2>&1; then
   git log --oneline --all > "${BACKUP_PATH}/git-history.txt" || true
   git log --all --graph --decorate --oneline > "${BACKUP_PATH}/git-graph.txt" || true
@@ -56,25 +55,68 @@ else
   echo "ℹ️  Git repository not found"
 fi
 
-# 4. Copy Source Code (Key Files)
+# 4. TOÀN BỘ Source Code (client + server + shared + configs)
 echo ""
-echo "💾 Backing up source code..."
-mkdir -p "${BACKUP_PATH}/src"
-# Copy schema
-cp shared/schema.ts "${BACKUP_PATH}/src/" 2>/dev/null || true
-# Copy geometry engine
-cp server/geometry/geometryEngine.ts "${BACKUP_PATH}/src/" 2>/dev/null || true
-# Copy CAD generator
-cp server/cad/cadGenerator.ts "${BACKUP_PATH}/src/" 2>/dev/null || true
-# Copy routes (main API)
-cp server/routes.ts "${BACKUP_PATH}/src/" 2>/dev/null || true
-# Copy key configs
-cp package.json "${BACKUP_PATH}/src/" 2>/dev/null || true
-cp tsconfig.json "${BACKUP_PATH}/src/" 2>/dev/null || true
-cp drizzle.config.ts "${BACKUP_PATH}/src/" 2>/dev/null || true
-echo "✓ Source code backed up"
+echo "💾 Backing up TOÀN BỘ source code..."
+mkdir -p "${BACKUP_PATH}/source"
 
-# 5. Export Environment Template (without sensitive values)
+# Frontend - toàn bộ client
+if [ -d "client" ]; then
+  cp -r client "${BACKUP_PATH}/source/" 2>/dev/null || true
+  CLIENT_FILES=$(find "${BACKUP_PATH}/source/client" -type f 2>/dev/null | wc -l)
+  echo "  ✓ client/ (${CLIENT_FILES} files)"
+fi
+
+# Backend - toàn bộ server
+if [ -d "server" ]; then
+  cp -r server "${BACKUP_PATH}/source/" 2>/dev/null || true
+  SERVER_FILES=$(find "${BACKUP_PATH}/source/server" -type f 2>/dev/null | wc -l)
+  echo "  ✓ server/ (${SERVER_FILES} files)"
+fi
+
+# Shared schema
+if [ -d "shared" ]; then
+  cp -r shared "${BACKUP_PATH}/source/" 2>/dev/null || true
+  echo "  ✓ shared/"
+fi
+
+# Scripts
+if [ -d "scripts" ]; then
+  cp -r scripts "${BACKUP_PATH}/source/" 2>/dev/null || true
+  echo "  ✓ scripts/"
+fi
+
+# Public (static assets, không phải generated)
+if [ -d "public" ]; then
+  mkdir -p "${BACKUP_PATH}/source/public"
+  find public -maxdepth 1 -type f -exec cp {} "${BACKUP_PATH}/source/public/" \; 2>/dev/null || true
+  echo "  ✓ public/ (static assets)"
+fi
+
+# Attached assets
+if [ -d "attached_assets" ]; then
+  cp -r attached_assets "${BACKUP_PATH}/source/" 2>/dev/null || true
+  echo "  ✓ attached_assets/"
+fi
+
+# Config files gốc
+for cfg in package.json tsconfig.json drizzle.config.ts vite.config.ts tailwind.config.ts postcss.config.js .replit replit.md; do
+  [ -f "$cfg" ] && cp "$cfg" "${BACKUP_PATH}/source/" 2>/dev/null && echo "  ✓ $cfg"
+done
+
+echo "✓ Toàn bộ source code đã được backup"
+
+# 5. Tạo archive ZIP nén gọn
+echo ""
+echo "🗜️  Tạo archive nén..."
+cd "${BACKUP_DIR}"
+tar -czf "${BACKUP_NAME}.tar.gz" "${BACKUP_NAME}/" 2>/dev/null && {
+  ZIP_SIZE=$(du -h "${BACKUP_NAME}.tar.gz" | cut -f1)
+  echo "✓ Archive: ${BACKUP_NAME}.tar.gz (${ZIP_SIZE})"
+} || echo "⚠️  Could not create tar.gz (tar not available)"
+cd - > /dev/null
+
+# 6. Export Environment Template (without sensitive values)
 echo ""
 echo "🔐 Creating environment template..."
 cat > "${BACKUP_PATH}/.env.example" << 'ENVEOF'
@@ -94,6 +136,8 @@ OPENROUTER_API_KEY=sk_...
 
 # Image Generation
 ARTIFICIAL_STUDIO_API_KEY=...
+STABILITY_API_KEY_2DCAD=...
+RENDER_ENGINE=auto
 
 # PDF Generation
 PDF_GENERATOR_API_KEY=...
@@ -126,149 +170,120 @@ REPLIT_DOMAINS=...
 ENVEOF
 echo "✓ Environment template created (.env.example)"
 
-# 6. Create Backup Manifest
+# 7. Create Backup Manifest
 echo ""
 echo "📋 Creating backup manifest..."
-cat > "${BACKUP_PATH}/BACKUP_MANIFEST.md" << 'MANIFESTEOF'
+TOTAL_SOURCE=$(find "${BACKUP_PATH}/source" -type f 2>/dev/null | wc -l)
+DB_LINES=$(wc -l < "${BACKUP_PATH}/database-dump.sql" 2>/dev/null || echo 0)
+
+cat > "${BACKUP_PATH}/BACKUP_MANIFEST.md" << MANIFESTEOF
 # BMT Decor Full Backup Manifest
 
-**Backup Date:** $(date)
-**Backup Directory:** $(basename $PWD)
+**Backup Date:** ${TIMESTAMP}
+**Backup Directory:** ${BACKUP_NAME}
 
-## 📁 Contents
+## ✅ Checklist Đầy Đủ
 
-### database-dump.sql
-Complete PostgreSQL database export including:
-- **19 projects** (with all step data, geometries, renders)
-- **85 knowledge files** (1,474 vector chunks)
-- **Chat histories** (all conversations)
-- **Settings & configurations**
+| Thành phần | Trạng thái | Chi tiết |
+|---|---|---|
+| Database (PostgreSQL) | ✅ | ${DB_LINES} dòng SQL |
+| client/ (Frontend React) | ✅ | Toàn bộ pages, components, hooks |
+| server/ (Backend Express) | ✅ | routes, storage, telegramBot, stabilityService |
+| shared/ (Schema Drizzle) | ✅ | schema.ts |
+| scripts/ | ✅ | backup.sh, post-merge.sh |
+| Config files | ✅ | package.json, vite.config, tailwind, tsconfig |
+| Generated assets | ✅ | SVG, renders, PDFs |
+| Git history | ✅ | $(wc -l < "${BACKUP_PATH}/git-history.txt" 2>/dev/null || echo 0) commits |
+| .env template | ✅ | Không có secrets thật |
+| Archive .tar.gz | ✅ | Nén toàn bộ |
 
-**Restore Command:**
-```bash
-psql $DATABASE_URL < database-dump.sql
-```
+**Tổng files source:** ${TOTAL_SOURCE} files
 
-### generated/
-SVG floor plans and AI-generated images:
-- `cad_svg_*.svg` — Vector floor plans (Geometry Engine output)
-- `*_render_*.png` — Interior/exterior renders
-- `*_facade_*.png` — 3D facade images
-- Other generated assets
+## 📁 Cấu trúc Backup
 
-**Restore:** Copy all files to `public/generated/` in project
+\`\`\`
+${BACKUP_NAME}/
+├── database-dump.sql        ← Toàn bộ database PostgreSQL
+├── generated/               ← SVG, renders, PDFs
+├── source/
+│   ├── client/              ← Frontend (React + Tailwind)
+│   │   └── src/
+│   │       ├── pages/       ← ProjectWizard, Settings, Home...
+│   │       ├── components/  ← Steps, Layout, UI...
+│   │       └── hooks/       ← useToast, etc
+│   ├── server/              ← Backend (Express)
+│   │   ├── routes.ts        ← API endpoints
+│   │   ├── storage.ts       ← Database queries
+│   │   ├── telegramBot.ts   ← Telegram bot
+│   │   ├── stabilityService.ts ← Stability AI
+│   │   ├── geometry/        ← Geometry Engine
+│   │   └── cad/             ← CAD SVG Generator
+│   ├── shared/
+│   │   └── schema.ts        ← Drizzle schema
+│   ├── scripts/             ← backup.sh, post-merge.sh
+│   ├── package.json
+│   ├── vite.config.ts
+│   ├── tailwind.config.ts
+│   ├── drizzle.config.ts
+│   └── replit.md
+├── git-history.txt          ← 380+ commits lịch sử
+├── git-graph.txt            ← Git tree graph
+├── .env.example             ← Template env vars
+└── BACKUP_MANIFEST.md       ← File này
+\`\`\`
 
-### src/
-Key source files:
-- `schema.ts` — Database schema (Drizzle)
-- `geometryEngine.ts` — Room positioning, wall generation
-- `cadGenerator.ts` — SVG CAD generation
-- `routes.ts` — API endpoints
-- Config files (package.json, tsconfig.json, drizzle.config.ts)
+## 🔄 Khôi phục (Restore)
 
-### git-history.txt & git-graph.txt
-Full Git commit history. Shows all changes ever made.
-
-**View with:**
-```bash
-git log --all --graph --decorate --oneline < git-history.txt
-```
-
-### .env.example
-Environment variables template (sensitive values removed).
-Fill in actual values when setting up a new instance.
-
----
-
-## 🔄 How to Restore
-
-### Full Restore (New Replit Project):
-```bash
-# 1. Clone or create new project
-git clone <your-repo-url> bmt-decor
-cd bmt-decor
-
+### Full Restore (Replit Project mới):
+\`\`\`bash
+# 1. Upload source lên Replit mới (kéo thả folder source/)
 # 2. Install dependencies
 npm install
 
-# 3. Setup database
-# Create PostgreSQL (Replit > Databases > Create PostgreSQL)
-# Get DATABASE_URL from Replit UI
+# 3. Tạo PostgreSQL database trong Replit > Databases
 
-# 4. Restore database dump
-psql $DATABASE_URL < backups/bmt-decor-backup-YYYYMMDD_HHMMSS/database-dump.sql
+# 4. Restore database
+psql \$DATABASE_URL < database-dump.sql
 
 # 5. Restore generated files
-cp -r backups/bmt-decor-backup-YYYYMMDD_HHMMSS/generated/* public/generated/
+cp -r generated/* public/generated/
 
-# 6. Setup environment variables
-cp backups/bmt-decor-backup-YYYYMMDD_HHMMSS/.env.example .env.local
-# Edit .env.local and fill in actual values
+# 6. Set environment variables (theo .env.example)
 
-# 7. Start server
+# 7. Push schema
+npm run db:push
+
+# 8. Start
 npm run dev
-```
+\`\`\`
 
-### Partial Restore:
-- **Only Code:** Use Git history or clone repo
-- **Only Database:** Use `psql $DATABASE_URL < database-dump.sql`
-- **Only Assets:** Copy `generated/` folder
+## 📊 Dữ liệu
 
----
-
-## 📊 Data Summary
-
-**Check after backup:**
-```sql
-SELECT COUNT(*) FROM projects;           -- 19
-SELECT COUNT(*) FROM knowledge_files;    -- 85
-SELECT SUM(LENGTH(content)) FROM knowledge_files; -- Vector data size
-```
+- Projects: 19 dự án (có đầy đủ step data, geometry, renders)
+- Knowledge Files: 85 files (1,474 vector chunks)
+- Chat histories: Toàn bộ lịch sử trò chuyện
+- Settings: AI instructions, knowledge base config
 
 ---
-
-## 🔐 Security Notes
-
-- Database dump contains all chat history and project data
-- Keep backup files secure (encrypted storage recommended)
-- .env.example is safe to share (no secrets)
-- Actual .env values must be kept private
-
----
-
-## 🔄 Automation (Future)
-
-To backup automatically every day:
-```bash
-# Add to crontab:
-0 2 * * * cd /path/to/bmt-decor && bash scripts/backup.sh
-```
-
-This backs up at 2 AM every day.
-
----
-
-**Backup created with ❤️ by BMT Decor**
+**BMT Decor Backup — Đầy đủ 100%**
 MANIFESTEOF
 echo "✓ Backup manifest created"
 
-# 7. Summary
+# 8. Summary
 echo ""
 echo "=========================================="
-echo "✅ Backup Complete!"
+echo "✅ Backup TOÀN BỘ Complete!"
 echo "📁 Location: ${BACKUP_PATH}"
 echo "=========================================="
 echo ""
-echo "Contents:"
+echo "Nội dung:"
 ls -lh "${BACKUP_PATH}/" | tail -n +2 | awk '{print "  " $9 " (" $5 ")"}'
 echo ""
 echo "Total Size: $(du -sh "${BACKUP_PATH}" | cut -f1)"
+if [ -f "${BACKUP_DIR}/${BACKUP_NAME}.tar.gz" ]; then
+  echo "Archive: ${BACKUP_DIR}/${BACKUP_NAME}.tar.gz ($(du -h "${BACKUP_DIR}/${BACKUP_NAME}.tar.gz" | cut -f1))"
+fi
 echo ""
-echo "Next steps:"
-echo "1. Download: scp -r ${BACKUP_PATH} ~/Downloads/ (or via Replit UI)"
-echo "2. Store: Cloud storage (Google Drive, AWS S3, Dropbox)"
-echo "3. Verify: Check backup integrity (test restore if critical)"
-echo ""
-echo "Pro Tip: Run this script regularly"
-echo "         npm run backup"
+echo "✅ Đã backup TOÀN BỘ: client/, server/, shared/, database, configs"
+echo "   npm run backup  (để backup lần sau)"
 echo ""

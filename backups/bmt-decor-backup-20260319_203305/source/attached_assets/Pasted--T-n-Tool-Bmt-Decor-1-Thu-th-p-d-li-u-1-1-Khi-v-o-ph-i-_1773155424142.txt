@@ -1,0 +1,48 @@
+
+Tên Tool Bmt Decor 
+
+1. Thu thập dữ liệu 
+1.1 Khi vào phải có from(1) biểu mẫu để người dùng " điền thông tin và cung cấp hình ảnh, video, sổ đỏ, file dự toán (INPUT)
+1.2 Khi nhận được hết thông tin (INPUT 1.1) thì tiến hành phân tích để chuẩn bị triển khai
+
+2. Hiện Form(2) cho người dùng chọn chọn thông tin để xem có khớp với thông tin AI vừa phân tích không. Và tích hợp với Gemi hoặc Chatgpt hiện khung chat để người đung có thể tự điền Prompt nếu người dùng muốn
+2.1 Khi có đầy đủ những thông tin trên thì bắt đầu tiến hành thuật toán layout AI bố trí phòng tự động 
+•                Graph layout
+•                Constraint solver
+•                Diffusion floorplan model
+2.2 Khi ra kết quả thì sẽ hiển thị ra cho người dùng xem đồng ý duyệt hay không. Nếu duyệt thì hỏi tiếp là tự AI dùng hình vừa duyệt bố trí vào bố cục trang hay người dùng tự setup. Khi người dùng cho lại kết quả thì tiếp tục tới phần tiếp theo
+
+3. Xuất bản vẽ CA
+
+3.1 Từ kết quả của 2(2,1 2,2) ta có layout để xuất bản vẽ CAD 
+3.2 Khi có kết quả phải hiển thị ra cho người dùng xem và duyệt , nếu không duyệt phải làm lại. 
+
+
+4. Tạo Mô Hình 3D
+
+4.1 Có CAD thì tạo mô hình 3D nhưng phải có From(3) khách chọn (phong cách , màu sắc, hoặc có khung chat cho người dùng viết suy nghĩ của ngừoi dùng vào giống như lệnh prompt, những gì người dùng viết và làm việc AI phải học hỏi và ghi nhớ.....) 
+4.2 khi nhận được INPUT của From(3) tiến hành Blender diễn hoạ 3D
+4.3 Có kết quả vẫn show cho người dùng duyệt hoặc làm lại
+
+5. Nội thất.  có nhưng infor trên thì  AI sẽ tiến hành chọn Vật Liệu, Đồ Nội Thất, Ánh Sáng,....
+5.1 Nhưng vẫn phải ra From(4) cho người dùng chat mong muốn của người dùng và biểu mẫu tích chọn.
+5.2 Có Input tiến hành thiết kế
+Tool	Vai trò
+Stable Diffusion	concept
+GPT	chọn nội thất
+Asset library	model furniture
+5.3 Khi có kết quả vẫn phải show cho người dùng duyệt hoặc làm lại
+
+6. Khi có ALL infor thì render hình ảnh
+6.1 Vẫn hiện from(5) cho người dùng chọn hoặc chat lệnh hoặc biểu đạt mong muốn
+6.2 Có kết quả vẫn show cho người dùng duyệt hoặc làm lại
+
+7. Tiến hành tạo File PDF .
+7.1 trước khi tạo vẫn phải hiển thị đoạn thông báo ( ước tính là bao nhiêu trang ..... )
+7.2 Người dùng duyệt mới tiến hành
+
+••• Khi dùng máy tính và tiến hành dùng tool sẽ có 1 bên hiện ra cho mình xem và có thể rê chuột tới để chỉnh sữa. 
+- Tích hợp thêm 1 AI chuyên chỉnh sữa như gemini - Chat gpt vào luôn trong tool để chat với khách hàng để tiện sữa file trong lúc dùng 
+- 
+Mỗi bước phải có câu hỏi mở rộng. Hỏi xong
+Mới làm vì cần kết quả tốt

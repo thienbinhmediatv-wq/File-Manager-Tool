@@ -1,0 +1,172 @@
+Enhance the AI assistant system in this architectural wizard project.
+
+The system already has:
+- a multi-step house design wizard
+- a right-side AI assistant chat panel
+
+Upgrade the assistant to behave like a smart architectural copilot.
+
+------------------------------------------------
+DESKTOP CHAT (PC)
+------------------------------------------------
+
+On desktop screens:
+
+Create a floating AI assistant button at the bottom-right corner.
+
+When the user clicks the button:
+open a popup chat window above the button.
+
+Chat window design:
+- width: about 380px
+- height: about 520px
+- rounded corners
+- white background
+- soft shadow
+
+The window must contain:
+- header "BMT Decor AI"
+- scrollable message area
+- text input
+- send button
+
+This chat window must overlay the page and must not break the wizard layout.
+
+------------------------------------------------
+MOBILE CHAT (ANDROID STYLE)
+------------------------------------------------
+
+On mobile devices (screen width < 768px):
+
+Instead of the popup window, show a floating chat bubble similar to Android Messenger chat heads.
+
+Requirements:
+
+• circular AI bubble
+• bottom-right corner
+• draggable
+• AI icon inside
+
+When the user taps the bubble:
+open a chat panel that slides up from the bottom.
+
+Mobile chat panel:
+- full width
+- about 80% screen height
+- rounded top corners
+- close button
+
+------------------------------------------------
+AUTO GREETING
+------------------------------------------------
+
+After the page loads, wait 4 seconds.
+
+Then the assistant should automatically display a greeting message:
+
+"Xin chào! Tôi là trợ lý thiết kế BMT Decor.
+Tôi có thể giúp bạn điền thông tin dự án hoặc gợi ý thiết kế."
+
+This message should appear even if the user has not opened the chat yet.
+
+------------------------------------------------
+FORM MONITORING
+------------------------------------------------
+
+The assistant must monitor wizard form inputs.
+
+Track:
+- input fields
+- select dropdowns
+- checkboxes
+- step navigation
+
+Store data in a state object:
+
+projectData
+
+Example:
+
+{
+ landSize: "5x20",
+ floors: 2,
+ bedrooms: 3,
+ style: "Modern"
+}
+
+------------------------------------------------
+SMART REACTIONS
+------------------------------------------------
+
+When form values change, the assistant should respond.
+
+Example:
+
+floors = 1
+bedrooms = 6
+
+Assistant response:
+"For a single-floor house, 6 bedrooms may feel crowded.
+Consider adding another floor."
+
+Example:
+
+style = Modern
+
+Assistant response:
+"Modern style works well with white, gray, glass and wood materials."
+
+------------------------------------------------
+STEP GUIDANCE
+------------------------------------------------
+
+The assistant must detect the current wizard step.
+
+Steps:
+Thu thập
+Phân tích
+CAD
+3D
+Nội thất
+Render
+PDF
+
+Example guidance:
+
+Render step:
+
+"Ở bước Render bạn nên tạo ít nhất các góc:
+• Mặt tiền
+• Phòng khách
+• Phòng ngủ Master"
+
+------------------------------------------------
+IDLE HELPER
+------------------------------------------------
+
+If the user stops interacting for 10 seconds,
+display a helpful suggestion related to the current step.
+
+------------------------------------------------
+EMAIL COLLECTION
+------------------------------------------------
+
+Keep the existing feature where the assistant asks for email or phone number to send the final PDF design file.
+
+Example message:
+
+"Để gửi hồ sơ thiết kế PDF hoàn chỉnh,
+vui lòng cung cấp email hoặc số điện thoại của bạn."
+
+After receiving the email, confirm:
+
+"Cảm ơn! Hồ sơ thiết kế sẽ được gửi đến email của bạn."
+
+------------------------------------------------
+IMPORTANT
+------------------------------------------------
+
+Do not break the existing wizard layout.
+Extend the AI assistant behavior only.
+
+The assistant should behave like an architectural design copilot that guides users while filling the project form.
