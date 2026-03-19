@@ -16,6 +16,7 @@ import { generateGeometry, LayoutValidationError } from "./geometry/geometryEngi
 import type { GeometryResult } from "./geometry/geometryEngine.js";
 import { generateCADSVG, generateValidationErrorSVG } from "./cad/cadGenerator.js";
 import { renderWithControlNet } from "./replicateService.js";
+import { renderWithStabilityAIFromSvgUrl, renderWithStabilityAI } from "./stabilityService.js";
 
 export const stepProgressMap = new Map<string, { progress: number; message: string }>();
 
@@ -320,6 +321,8 @@ async function resolveReferenceToBuffer(reference: string): Promise<Buffer> {
   return Buffer.from(arrayBuffer);
 }
 
+const RENDER_ENGINE = process.env.RENDER_ENGINE || "auto";
+
 async function aiGenerateImageWithReplicateFallback(
   svgUrl: string | null,
   prompt: string,
@@ -327,17 +330,35 @@ async function aiGenerateImageWithReplicateFallback(
   name: string,
   referenceImage?: string
 ): Promise<string> {
-  if (svgUrl) {
+  const engine = RENDER_ENGINE;
+
+  if (engine === "stability" || engine === "auto") {
     try {
-      const replicateResult = await renderWithControlNet(svgUrl, prompt, projectId, name);
-      if (replicateResult) {
-        console.log(`[Replicate] ControlNet render succeeded for "${name}"`);
-        return replicateResult;
+      const stabilityResult = await renderWithStabilityAIFromSvgUrl(svgUrl, prompt);
+      if (stabilityResult) {
+        console.log(`[stabilityService] Stability AI used for "${name}"`);
+        return stabilityResult;
       }
+      console.warn(`[stabilityService] Stability AI failed for "${name}", falling back to Replicate`);
     } catch (e) {
-      console.warn(`[Replicate] ControlNet failed for "${name}", falling back to OpenAI:`, e);
+      console.warn(`[stabilityService] Stability AI failed for "${name}", falling back to Replicate:`, e);
     }
   }
+
+  if (engine !== "openai") {
+    if (svgUrl) {
+      try {
+        const replicateResult = await renderWithControlNet(svgUrl, prompt, projectId, name);
+        if (replicateResult) {
+          console.log(`[Replicate] ControlNet render succeeded for "${name}"`);
+          return replicateResult;
+        }
+      } catch (e) {
+        console.warn(`[Replicate] ControlNet failed for "${name}", falling back to OpenAI:`, e);
+      }
+    }
+  }
+
   return aiGenerateImage(prompt, projectId, name, referenceImage);
 }
 
@@ -1119,7 +1140,7 @@ Trả lời chi tiết, có con số thực tế.` }
           })),
           Promise.all(interiorPrompts6.map(async (ip) => {
             try {
-              const url = await aiGenerateImage(ip.prompt, id, `render_${ip.name.replace(/\s/g, "_")}`);
+              const url = await aiGenerateImageWithReplicateFallback(null, ip.prompt, id, `render_${ip.name.replace(/\s/g, "_")}`);
               return { name: ip.name, url, angle: ip.name };
             } catch (e) {
               console.error(`Step 6 interior render error for ${ip.name}:`, e);
@@ -3096,6 +3117,30 @@ ${searchContext ? "Nếu có kết quả tìm kiếm phía trên, hãy tham kh�
     } catch (err) {
       console.error("Stripe products error:", err);
       res.status(500).json({ message: "Failed to get products" });
+    }
+  });
+
+  app.post("/api/test-stability", async (req, res) => {
+    try {
+      const { prompt, style } = req.body;
+      if (!prompt || typeof prompt !== "string") {
+        return res.status(400).json({ message: "prompt is required" });
+      }
+      const fullPrompt = style ? `${prompt}, style: ${style}` : prompt;
+      const result = await renderWithStabilityAI(fullPrompt, null);
+      if (!result) {
+        return res.status(502).json({ message: "Stability AI failed — check STABILITY_API_KEY_2DCAD and API quota" });
+      }
+      const imgPath = path.join(process.cwd(), "public", result);
+      if (!fs.existsSync(imgPath)) {
+        return res.status(500).json({ message: "Generated file not found" });
+      }
+      const imgBuffer = fs.readFileSync(imgPath);
+      const base64 = imgBuffer.toString("base64");
+      return res.json({ success: true, url: result, base64: `data:image/png;base64,${base64}` });
+    } catch (err) {
+      console.error("[test-stability] error:", err);
+      return res.status(500).json({ message: "Internal error", error: String(err) });
     }
   });
 

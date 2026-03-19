@@ -36,7 +36,10 @@ Each step (3-7) has a corresponding Cẩm nang (handbook) stored in `knowledge_f
 ## Architecture
 - **Frontend**: React + Vite + TailwindCSS + shadcn/ui + wouter (routing) + TanStack Query
 - **Backend**: Express.js + Drizzle ORM + PostgreSQL
-- **AI**: OpenAI via Replit AI Integrations (gpt-4.1-mini for chat, gpt-image-1 for images)
+- **AI**: OpenAI via Replit AI Integrations (gpt-4.1-mini for chat, gpt-image-1 for images), Stability AI (optional render engine via STABILITY_API_KEY_2DCAD)
+- **Render Engine**: Configurable via `RENDER_ENGINE` env var (`stability`, `replicate`, `openai`, `auto`). Default `auto`: Stability AI → Replicate (SVG-based ControlNet only) → OpenAI. When `replicate` + no SVG input, falls through directly to OpenAI. Uses `aspectRatio` (not width/height) per Stability v2beta API.
+- **Stability AI Service**: `server/stabilityService.ts` — `renderWithStabilityAI()` and `renderWithStabilityAIFromSvgUrl()` functions
+- **Test Endpoint**: `POST /api/test-stability` — accepts `{ prompt, style }`, returns `{ success, url, base64 }`
 - **Payments**: Stripe via Replit Connectors (stripe-replit-sync for webhook/sync)
 - **Language**: Vietnamese UI labels and prompts throughout
 
@@ -45,6 +48,7 @@ Each step (3-7) has a corresponding Cẩm nang (handbook) stored in `knowledge_f
 - `server/routes.ts` - All API endpoints (CRUD, step operations, AI chat, settings, knowledge files, Stripe)
 - `server/storage.ts` - DatabaseStorage class with IStorage interface
 - `server/stripeClient.ts` - Stripe client via Replit Connectors (getUncachableStripeClient, getStripeSync)
+- `server/stabilityService.ts` - Stability AI render service (text-to-image, image-to-image with SVG input)
 - `server/driveKnowledge.ts` - Google Drive knowledge integration (BMT Decor folder)
 - `server/index.ts` - Express setup with Stripe webhook (BEFORE express.json), Stripe init
 - `client/src/pages/Dashboard.tsx` - Project list dashboard (navigates to /projects/new)
